@@ -1,88 +1,89 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
-const XML_NAMESPACE = "http://tusistema.com/covol";
-
-const formatContent = (selectedTags, brandName, descripcionInstalacion, numPermiso, formatType = 'xml') => {
+// Función para formatear contenido con seguridad
+const formatContent = (selectedTags, brandName, installationDesc, permitNumber, formatType = 'txt') => {
     const currentDate = new Date();
     
-    const escapeContent = (unsafe, isXml = true) => {
-        if (!unsafe) return '';
-        const str = unsafe.toString();
-        return isXml 
-            ? str.replace(/&/g, '&amp;')
-                 .replace(/</g, '&lt;')
-                 .replace(/>/g, '&gt;')
-                 .replace(/"/g, '&quot;')
-                 .replace(/'/g, '&apos;')
-            : str;
+    const escapeContent = (content) => {
+        if (!content) return '';
+        return String(content);
     };
 
-    const formatDate = (date, isXml = true) => {
-        return isXml 
-            ? date.toISOString()
-            : date.toLocaleString('es-MX', { 
-                timeZone: 'America/Mexico_City',
-                year: 'numeric', 
-                month: '2-digit', 
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-              });
+    const formatDate = () => {
+        return currentDate.toLocaleString('es-MX', { 
+            timeZone: 'America/Mexico_City',
+            year: 'numeric', 
+            month: '2-digit', 
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
     };
 
-    if (formatType === 'xml') {
-        return `<?xml version="1.0" encoding="UTF-8"?>
-<Covol:Reporte xmlns:Covol="${XML_NAMESPACE}">
-    <Covol:DescripcionInstalacion>${escapeContent(descripcionInstalacion)}</Covol:DescripcionInstalacion>
-    <Covol:NumPermiso>${escapeContent(numPermiso)}</Covol:NumPermiso>
-    <Covol:FechaGeneracion>${formatDate(currentDate)}</Covol:FechaGeneracion>
-    <Covol:Producto>
-        <Covol:MarcaComercial>${escapeContent(brandName)}</Covol:MarcaComercial>
-${selectedTags.map(tag => `        <${escapeContent(tag.tagName)}>${escapeContent(tag.content)}</${escapeContent(tag.tagName)}>`).join('\n')}
-    </Covol:Producto>
-</Covol:Reporte>`;
+    if (formatType === 'pdf') {
+        // Estructura básica para PDF (será formateado por el backend)
+        return {
+            header: {
+                title: `Reporte de Operaciones - ${brandName}`,
+                date: formatDate(),
+                installation: installationDesc,
+                permit: permitNumber
+            },
+            content: selectedTags.map(tag => ({
+                label: tag.tagName,
+                value: tag.content
+            }))
+        };
     } else {
+        // Formato TXT por defecto
         return `======================================
-Empresa: ${escapeContent(descripcionInstalacion, false)}
-Permiso CRE: ${escapeContent(numPermiso, false)}
-Generación del Archivo: ${formatDate(currentDate, false)}
+Empresa: ${escapeContent(installationDesc)}
+Permiso CRE: ${escapeContent(permitNumber)}
+Generación del Archivo: ${formatDate()}
 --------------------------------------
-Producto: ${escapeContent(brandName, false)}
-${selectedTags.map(tag => `  ${escapeContent(tag.tagName, false)}: ${escapeContent(tag.content, false)}`).join('\n')}`;
+Producto: ${escapeContent(brandName)}
+${selectedTags.map(tag => `  ${escapeContent(tag.tagName)}: ${escapeContent(tag.content)}`).join('\n')}
+======================================`;
     }
 };
 
+// API expuesta al renderer
 contextBridge.exposeInMainWorld('electronAPI', {
-    // Funciones de archivo
+    // Operaciones con archivos
     openFileDialog: () => ipcRenderer.invoke('dialog:openFile'),
-    saveFile: (content, formatType = 'xml') => {
-        const contentToSend = typeof content === 'string' ? content : String(content);
-        return ipcRenderer.invoke('save-file', {
-            content: contentToSend,
-            defaultName: formatType === 'xml' ? 'reporte.xml' : 'reporte.txt'
+    saveFile: (content, formatType = 'txt') => ipcRenderer.invoke('dialog:saveFile', { 
+        content, 
+        defaultName: `reporte_${new Date().toISOString().slice(0,10)}.${formatType}`
+    }),
+
+    // Procesamiento de datos
+    extractBrands: (filePath) => ipcRenderer.invoke('data:extractBrands', filePath),
+    getSubtagsByMainTag: (filePath, brandName, mainTag) => 
+        ipcRenderer.invoke('data:getSubtags', { filePath, brandName, mainTag }),
+    getSubtagValues: (filePath, brandName, mainTag, subtags) => 
+        ipcRenderer.invoke('data:getValues', { filePath, brandName, mainTag, subtags }),
+    
+    // Generación de reportes
+    generateReport: (data, formatType = 'txt') => {
+        if (!data.descripcionInstalacion || !data.numPermiso) {
+            throw new Error('Faltan datos requeridos: descripcionInstalacion y numPermiso');
+        }
+        
+        const reportData = formatContent(
+            data.selectedTags || [],
+            data.brandName || '',
+            data.descripcionInstalacion,
+            data.numPermiso,
+            formatType
+        );
+        
+        return ipcRenderer.invoke('report:generate', {
+            data: reportData,
+            formatType
         });
     },
     
-    // Funciones de extracción de datos
-    getBrandsFromFile: (filePath) => ipcRenderer.invoke('extract-brands', filePath),
-    findUppercaseTags: (filePath, brandName) => ipcRenderer.invoke('find-uppercase-tags', filePath, brandName),
-    findTagContent: (filePath, brand, uppercaseTag, tagName) => 
-        ipcRenderer.invoke('find-tag-content', filePath, brand, uppercaseTag, tagName),
-    extractFixedTags: (filePath) => ipcRenderer.invoke('extract-fixed-tags', filePath),
-    
-    // Función de formateo
-    formatContent: (selectedTags, brandName, descripcionInstalacion, numPermiso, formatType) => {
-        if (!descripcionInstalacion || !numPermiso) {
-            throw new Error('Los datos de DescripcionInstalacion y NumPermiso son requeridos');
-        }
-        
-        return formatContent(
-            selectedTags || [],
-            brandName || '',
-            descripcionInstalacion,
-            numPermiso,
-            formatType || 'xml'
-        );
-    }
+    // Extracción de metadatos
+    extractMetadata: (filePath) => ipcRenderer.invoke('data:extractMetadata', filePath)
 });

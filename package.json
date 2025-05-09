@@ -60,6 +60,7 @@
   },
   "dependencies": {
     "iconv-lite": "^0.6.3",
+    "pdfkit": "^0.17.1",
     "xml2js": "^0.6.2"
   }
 }

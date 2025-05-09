@@ -4,196 +4,105 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="
-    default-src 'self';
-    script-src 'self' 'unsafe-inline';
-    style-src 'self' 'unsafe-inline';
-    img-src 'self' data:;
+        default-src 'self';
+        script-src 'self';
+        style-src 'self' 'unsafe-inline';
+        img-src 'self' data:;
     ">
-    <title>Extractor de Marcas Comerciales XML</title>
+    <title>Procesador de Datos XML</title>
     <link rel="stylesheet" href="styles.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>Extractor de Marcas Comerciales XML</h1>
-            <p>Herramienta profesional para extraer, analizar y organizar datos de archivos XML de marcas comerciales</p>
+            <h1><span class="icon">📋</span> Procesador de Datos XML</h1>
+            <p>Herramienta para extraer y analizar datos de archivos XML</p>
         </div>
 
-        <!-- Sección para seleccionar un archivo -->
-        <section id="file-section" class="card fade-in">
+        <!-- Sección de archivo -->
+        <section id="file-section" class="card">
             <div class="card-header">
                 <div class="step-badge">1</div>
-                <div>
-                    <h2 class="card-title">Cargar Archivo XML</h2>
-                    <p class="card-description">Seleccione el archivo XML que contiene los datos de marcas comerciales</p>
-                </div>
+                <h2 class="card-title">Cargar Archivo XML</h2>
             </div>
-            
-            <button id="select-file" class="btn btn-primary">
-                <i class="material-icons">cloud_upload</i> Seleccionar Archivo
+            <button id="select-file-btn" class="btn btn-primary">
+                <span class="icon">📁</span> Seleccionar Archivo
             </button>
-            
-            <div id="file-info" class="alert alert-info">
-                <i class="material-icons">info</i>
-                <span>No se ha seleccionado ningún archivo.</span>
+            <div id="file-info" class="file-info">
+                <span class="icon">ℹ️</span>
+                <span>No se ha seleccionado ningún archivo</span>
             </div>
-            
-            <div id="status" class="alert">
-                <i class="material-icons">check_circle</i>
+            <div id="status" class="alert alert-info">
+                <span class="icon">⏳</span>
                 <span>Listo para comenzar</span>
-            </div>
-            
-            <div class="progress-container" style="display: none;">
-                <div class="progress-bar" style="width: 0%"></div>
             </div>
         </section>
 
-        <!-- Sección para seleccionar la marca comercial -->
+        <!-- Sección de marca -->
         <section id="brand-section" class="card" style="display: none;">
             <div class="card-header">
                 <div class="step-badge">2</div>
-                <div>
-                    <h2 class="card-title">Seleccionar Marca Comercial</h2>
-                    <p class="card-description">Filtre los datos seleccionando una marca comercial específica</p>
-                </div>
+                <h2 class="card-title">Seleccionar Marca</h2>
             </div>
-            
-            <div class="form-group">
-                <label for="brand-select" class="form-label">Marcas disponibles:</label>
-                <select id="brand-select" class="form-control">
-                    <option value="">-- Seleccione una marca --</option>
-                </select>
-            </div>
-            
-            <div class="table-container">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Marca</th>
-                            <th>Número de Registro</th>
-                            <th>Fecha</th>
-                            <th>Etiquetas</th>
-                        </tr>
-                    </thead>
-                    <tbody id="brand-table-body">
-                        <tr>
-                            <td colspan="4" style="text-align: center;">Seleccione un archivo primero</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+            <select id="brand-select" class="form-control" disabled>
+                <option value="">-- Seleccione una marca --</option>
+            </select>
         </section>
 
-        <!-- Sección para buscar etiquetas -->
-        <section id="search-section" class="card" style="display: none;">
+        <!-- Sección de categoría -->
+        <section id="category-section" class="card" style="display: none;">
             <div class="card-header">
                 <div class="step-badge">3</div>
-                <div>
-                    <h2 class="card-title">Buscar Etiquetas</h2>
-                    <p class="card-description">Encuentre y seleccione las etiquetas específicas que desea extraer</p>
-                </div>
+                <h2 class="card-title">Seleccionar Categoría</h2>
             </div>
-            
-            <div class="form-group">
-                <label for="uppercase-tag-select" class="form-label">Categorías principales:</label>
-                <select id="uppercase-tag-select" class="form-control">
-                    <option value="">-- Seleccione una categoría --</option>
-                </select>
+            <select id="main-tag-select" class="form-control" disabled>
+                <option value="">-- Seleccione una categoría --</option>
+            </select>
+        </section>
+
+        <!-- Sección de datos -->
+        <section id="data-section" class="card" style="display: none;">
+            <div class="card-header">
+                <div class="step-badge">4</div>
+                <h2 class="card-title">Datos Disponibles</h2>
             </div>
-            
-            <div class="form-group">
-                <label for="tag-input" class="form-label">Buscar etiqueta específica:</label>
-                <div class="search-box">
-                    <input type="text" id="tag-input" class="form-control" placeholder="Ej: TotalRecepcionesMes">
-                    <button id="search-btn" class="btn btn-secondary">
-                        <i class="material-icons">search</i> Buscar
-                    </button>
-                </div>
+            <div id="data-container"></div>
+            <button id="search-btn" class="btn btn-primary" disabled>
+                <span class="icon">🔍</span> Buscar Datos
+            </button>
+        </section>
+
+        <!-- Sección de resultados -->
+        <section id="results-section" class="card" style="display: none;">
+            <div class="card-header">
+                <div class="step-badge">5</div>
+                <h2 class="card-title">Resultados</h2>
             </div>
-            
             <div class="table-container">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Etiqueta</th>
-                            <th>Valor</th>
-                            <th>Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody id="result">
-                        <tr>
-                            <td colspan="3" style="text-align: center;">Realice una búsqueda para ver resultados</td>
-                        </tr>
-                    </tbody>
+                <table id="results-table" class="table">
+                    <!-- Contenido dinámico -->
                 </table>
             </div>
         </section>
 
-        <!-- Sección para generar documento -->
+        <!-- Sección de generación -->
         <section id="generate-section" class="card" style="display: none;">
             <div class="card-header">
-                <div class="step-badge">4</div>
-                <div>
-                    <h2 class="card-title">Generar Documento</h2>
-                    <p class="card-description">Revise y genere el documento con las etiquetas seleccionadas</p>
-                </div>
+                <div class="step-badge">6</div>
+                <h2 class="card-title">Generar Reporte</h2>
             </div>
-            
-            <div class="form-group">
-                <label class="form-label">Etiquetas seleccionadas:</label>
-                <div id="selected-tags-container" class="tag-container">
-                    <span class="tag-chip">
-                        Ninguna etiqueta seleccionada
-                        <span class="remove-btn material-icons">close</span>
-                    </span>
-                </div>
+            <div class="btn-group">
+                <button id="generate-txt-btn" class="btn btn-primary">
+                    <span class="icon">📝</span> Generar TXT
+                </button>
+                <button id="generate-pdf-btn" class="btn btn-primary">
+                    <span class="icon">📊</span> Generar PDF
+                </button>
             </div>
-            
-            <div class="table-container">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Etiqueta</th>
-                            <th>Valor</th>
-                            <th>Acción</th>
-                        </tr>
-                    </thead>
-                    <tbody id="selected-tags-table">
-                        <tr>
-                            <td colspan="3" style="text-align: center;">No hay etiquetas seleccionadas</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-            
-            <button id="generate-doc-btn" class="btn btn-primary">
-                <i class="material-icons">save_alt</i> Generar Documento
-            </button>
+            <div id="progress-bar" class="progress-bar"></div>
         </section>
     </div>
 
     <script src="renderer.js"></script>
-    <script>
-        // Añadir clases fade-in cuando las secciones se muestran
-        document.addEventListener('DOMContentLoaded', () => {
-            const observer = new MutationObserver((mutations) => {
-                mutations.forEach((mutation) => {
-                    if (mutation.attributeName === 'style') {
-                        const element = mutation.target;
-                        if (element.style.display !== 'none') {
-                            element.classList.add('fade-in');
-                        }
-                    }
-                });
-            });
-
-            const sections = document.querySelectorAll('#brand-section, #search-section, #generate-section');
-            sections.forEach(section => {
-                observer.observe(section, { attributes: true });
-            });
-        });
-    </script>
 </body>
 </html>
