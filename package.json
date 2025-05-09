@@ -19,11 +19,7 @@
     "appId": "com.soga.appxml",
     "productName": "AppXML",
     "copyright": "Copyright © 2024 SOGA",
-    "publish": {
-      "provider": "github",
-      "releaseType": "draft",
-      "token": "$GH_TOKEN"
-    },
+    "publish": null,
     "win": {
       "target": "nsis",
       "requestedExecutionLevel": "asInvoker",
