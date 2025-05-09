@@ -5,10 +5,13 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder",
+    "build": "electron-builder --win --x64",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": ["electron", "xml"],
+  "keywords": [
+    "electron",
+    "xml"
+  ],
   "author": "mabelperez",
   "license": "ISC",
   "type": "commonjs",
@@ -16,29 +19,48 @@
     "appId": "com.soga.appxml",
     "productName": "AppXML",
     "copyright": "Copyright © 2024 SOGA",
-    "publish": null,  
+    "publish": {
+      "provider": "github",
+      "releaseType": "draft",
+      "token": "$GH_TOKEN"
+    },
     "win": {
       "target": "nsis",
-      "requestedExecutionLevel": "asInvoker"
+      "requestedExecutionLevel": "asInvoker",
+      "icon": "build/icon.ico"
     },
     "mac": {
-      "target": "dmg"
+      "target": "dmg",
+      "icon": "build/icon.icns"
     },
     "linux": {
-      "target": ["deb", "AppImage"]
+      "target": [
+        "deb",
+        "AppImage"
+      ],
+      "icon": "build/icon.png"
     },
     "directories": {
       "output": "dist",
-      "buildResources": "build"  
+      "buildResources": "build"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true
-    }
+    },
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "resources",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ]
   },
   "devDependencies": {
     "electron": "^28.0.0",
-    "electron-builder": "^24.0.0"
+    "electron-builder": "^26.0.12"
   },
   "dependencies": {
     "iconv-lite": "^0.6.3",
