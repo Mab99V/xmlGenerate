@@ -5,7 +5,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder",  
+    "build": "electron-builder",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": ["electron", "xml"],
@@ -16,19 +16,20 @@
     "appId": "com.soga.appxml",
     "productName": "AppXML",
     "copyright": "Copyright © 2024 SOGA",
-    "publish": "never",
+    "publish": null,  
     "win": {
       "target": "nsis",
-      "requestedExecutionLevel": "asInvoker"  
+      "requestedExecutionLevel": "asInvoker"
     },
     "mac": {
-      "target": "dmg"  
+      "target": "dmg"
     },
     "linux": {
-      "target": ["deb", "AppImage"]  
+      "target": ["deb", "AppImage"]
     },
     "directories": {
-      "output": "dist"  
+      "output": "dist",
+      "buildResources": "build"  
     },
     "nsis": {
       "oneClick": false,
@@ -37,7 +38,7 @@
   },
   "devDependencies": {
     "electron": "^28.0.0",
-    "electron-builder": "^24.0.0"  
+    "electron-builder": "^24.0.0"
   },
   "dependencies": {
     "iconv-lite": "^0.6.3",
