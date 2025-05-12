@@ -63,6 +63,33 @@ body {
   font-weight: bold;
 }
 
+/* Formularios y controles */
+.form-control {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--medium-gray);
+  border-radius: var(--border-radius);
+  font-size: 16px;
+}
+
+.checkbox-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+}
+
+.form-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.form-check-input {
+  width: 18px;
+  height: 18px;
+}
+
 /* Botones */
 .btn {
   display: inline-flex;
@@ -84,6 +111,16 @@ body {
   background-color: var(--primary-dark);
 }
 
+.btn-secondary {
+  background-color: var(--medium-gray);
+  color: var(--text-color);
+}
+
+.btn-secondary:hover {
+  background-color: var(--dark-gray);
+  color: white;
+}
+
 .btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
@@ -95,19 +132,12 @@ body {
   margin-top: 15px;
 }
 
-/* Formularios */
-.form-control {
-  width: 100%;
-  padding: 10px;
-  border: 1px solid var(--medium-gray);
-  border-radius: var(--border-radius);
-  font-size: 16px;
-}
-
 /* Tablas */
 .table-container {
   overflow-x: auto;
   margin-top: 20px;
+  max-height: 400px;
+  overflow-y: auto;
 }
 
 .table {
@@ -124,6 +154,52 @@ body {
 .table th {
   background-color: var(--primary-color);
   color: white;
+  position: sticky;
+  top: 0;
+}
+
+.results-table th, .results-table td {
+  padding: 10px 12px;
+}
+
+/* Controles de resultados */
+.results-controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 15px;
+}
+
+.selected-count {
+  margin-left: auto;
+  font-weight: bold;
+  color: var(--primary-color);
+}
+
+/* Tags seleccionados */
+.selected-tags-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 15px;
+}
+
+.tag-chip {
+  background-color: var(--medium-gray);
+  padding: 6px 12px;
+  border-radius: 20px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tag-chip .remove-btn {
+  cursor: pointer;
+  color: var(--dark-gray);
+}
+
+.tag-chip .remove-btn:hover {
+  color: var(--error-color);
 }
 
 /* Alertas */
@@ -139,6 +215,21 @@ body {
 .alert-info {
   background-color: #e8f0fe;
   color: var(--primary-dark);
+}
+
+.alert-success {
+  background-color: #e6f4ea;
+  color: var(--success-color);
+}
+
+.alert-warning {
+  background-color: #fef7e0;
+  color: var(--warning-color);
+}
+
+.alert-error {
+  background-color: #fce8e6;
+  color: var(--error-color);
 }
 
 /* Barra de progreso */

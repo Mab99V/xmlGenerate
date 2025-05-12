@@ -1,389 +1,442 @@
 document.addEventListener('DOMContentLoaded', () => {
-    // Verificar que los elementos del DOM existen
+    // Variables de estado
+    let currentFilePath = null;
+    let selectedBrands = [];
+    let selectedMainTag = null;
+    let selectedData = [];
+    let allResults = [];
+    
+    // Elementos del DOM
     const selectFileBtn = document.getElementById('select-file-btn');
-    const brandSelect = document.getElementById('brand-select');
+    const brandCheckboxesContainer = document.getElementById('brand-checkboxes');
+    const selectAllBrandsCheckbox = document.getElementById('select-all-brands');
+    const confirmBrandsBtn = document.getElementById('confirm-brands-btn');
     const mainTagSelect = document.getElementById('main-tag-select');
     const searchBtn = document.getElementById('search-btn');
+    const resultsTable = document.getElementById('results-table');
+    const selectAllResultsBtn = document.getElementById('select-all-results');
+    const clearSelectionBtn = document.getElementById('clear-selection');
+    const addSelectedBtn = document.getElementById('add-selected-btn');
     const generateTxtBtn = document.getElementById('generate-txt-btn');
     const generatePdfBtn = document.getElementById('generate-pdf-btn');
-
-    if (!selectFileBtn || !brandSelect || !mainTagSelect || !searchBtn || !generateTxtBtn || !generatePdfBtn) {
-        console.error('Error: No se encontraron todos los elementos necesarios en el DOM');
-        return;
-    }
-
-    let currentFilePath = null;
-    let selectedBrand = null;
-    let selectedMainTag = null;
-    let selectedSubtags = [];
-    let availableSubtags = [];
-
-    // Función para actualizar el estado con validación
+    
+    // Función para actualizar el estado
     function updateStatus(message, type = 'info') {
         const statusElement = document.getElementById('status');
-        if (!statusElement) {
-            console.error('Elemento de estado no encontrado');
-            return;
-        }
-
+        if (!statusElement) return;
+        
         const icons = {
-            'info': 'info-circle',
-            'success': 'check-circle',
-            'warning': 'exclamation-triangle',
-            'error': 'x-circle'
+            'info': '⏳',
+            'success': '✅',
+            'warning': '⚠️',
+            'error': '❌'
         };
-
-        statusElement.innerHTML = `<i class="bi bi-${icons[type] || 'info-circle'}"></i><span>${message}</span>`;
+        
+        statusElement.innerHTML = `<span class="icon">${icons[type]}</span><span>${message}</span>`;
         statusElement.className = `alert alert-${type}`;
     }
-
-    // Función para cargar archivo con validación mejorada
+    
+    // 1. Cargar archivo XML
     async function selectFile() {
         try {
             updateStatus('Cargando archivo...', 'info');
             
             const fileInfo = await window.electronAPI.openFileDialog();
-            if (!fileInfo || !fileInfo.path) {
+            if (!fileInfo?.path) {
                 updateStatus('No se seleccionó ningún archivo', 'info');
                 return;
             }
-
-            // Validar extensión del archivo
-            if (!fileInfo.path.toLowerCase().endsWith('.xml')) {
-                updateStatus('Por favor seleccione un archivo XML', 'warning');
-                return;
-            }
-
+            
             currentFilePath = fileInfo.path;
             document.getElementById('file-info').innerHTML = 
-                `<i class="bi bi-file-earmark-text"></i><span>Archivo: ${path.basename(fileInfo.path)} (${fileInfo.size})</span>`;
-
-            // Cargar marcas comerciales con manejo de errores
+                `<span class="icon">ℹ️</span><span>Archivo: ${path.basename(fileInfo.path)} (${fileInfo.size})</span>`;
+            
+            // Cargar marcas comerciales
             const brands = await window.electronAPI.extractBrands(currentFilePath);
-            if (!brands || brands.length === 0) {
+            if (!brands?.length) {
                 updateStatus('El archivo no contiene marcas comerciales válidas', 'warning');
                 return;
             }
-
-            // Actualizar selector de marcas
-            brandSelect.innerHTML = '<option value="">-- Seleccione una marca --</option>';
+            
+            // Mostrar checkboxes de marcas
+            brandCheckboxesContainer.innerHTML = '';
+            
+            // Checkbox "Seleccionar todas"
+            const selectAllDiv = document.createElement('div');
+            selectAllDiv.className = 'form-check';
+            selectAllDiv.innerHTML = `
+                <input class="form-check-input" type="checkbox" id="select-all-brands">
+                <label class="form-check-label" for="select-all-brands">Seleccionar todas</label>
+            `;
+            brandCheckboxesContainer.appendChild(selectAllDiv);
+            
+            // Checkboxes para cada marca
             brands.forEach(brand => {
-                const option = document.createElement('option');
-                option.value = brand;
-                option.textContent = brand;
-                brandSelect.appendChild(option);
+                const div = document.createElement('div');
+                div.className = 'form-check';
+                div.innerHTML = `
+                    <input class="form-check-input brand-checkbox" type="checkbox" id="brand-${brand}" value="${brand}">
+                    <label class="form-check-label" for="brand-${brand}">${brand}</label>
+                `;
+                brandCheckboxesContainer.appendChild(div);
             });
-
-            brandSelect.disabled = false;
+            
+            // Event listeners para selección
+            document.getElementById('select-all-brands').addEventListener('change', function() {
+                const checkboxes = document.querySelectorAll('.brand-checkbox');
+                checkboxes.forEach(checkbox => {
+                    checkbox.checked = this.checked;
+                });
+                confirmBrandsBtn.style.display = this.checked ? 'block' : 'none';
+            });
+            
+            const brandCheckboxes = document.querySelectorAll('.brand-checkbox');
+            brandCheckboxes.forEach(checkbox => {
+                checkbox.addEventListener('change', function() {
+                    const anyChecked = [...brandCheckboxes].some(cb => cb.checked);
+                    confirmBrandsBtn.style.display = anyChecked ? 'block' : 'none';
+                    selectAllBrandsCheckbox.checked = [...brandCheckboxes].every(cb => cb.checked);
+                });
+            });
+            
             document.getElementById('brand-section').style.display = 'block';
             updateStatus('Archivo cargado exitosamente', 'success');
-
+            
         } catch (error) {
             console.error('Error al cargar archivo:', error);
             updateStatus(`Error: ${error.message}`, 'error');
         }
     }
-
-    // Función para seleccionar marca comercial
-    async function selectBrand() {
-        selectedBrand = brandSelect.value;
-        if (!selectedBrand) {
-            updateStatus('Seleccione una marca comercial', 'warning');
+    
+    // 2. Confirmar selección de marcas
+    confirmBrandsBtn.addEventListener('click', function() {
+        const checkboxes = document.querySelectorAll('.brand-checkbox:checked');
+        selectedBrands = Array.from(checkboxes).map(cb => cb.value);
+        
+        if (selectedBrands.length === 0) {
+            updateStatus('Seleccione al menos una marca', 'warning');
             return;
         }
-
-        try {
-            mainTagSelect.innerHTML = '<option value="">-- Seleccione una categoría --</option>';
-            const mainTags = ['RECEPCIONES', 'CONTROLDEEXISTENCIAS', 'ENTREGAS'];
-            
-            mainTags.forEach(tag => {
-                const option = document.createElement('option');
-                option.value = tag;
-                option.textContent = tag;
-                mainTagSelect.appendChild(option);
-            });
-
-            mainTagSelect.disabled = false;
-            document.getElementById('category-section').style.display = 'block';
-            updateStatus(`Marca "${selectedBrand}" seleccionada`, 'success');
-
-        } catch (error) {
-            console.error('Error al seleccionar marca:', error);
-            updateStatus(`Error: ${error.message}`, 'error');
-        }
-    }
-
-    // Función para seleccionar categoría principal
-    async function selectMainTag() {
-        selectedMainTag = mainTagSelect.value;
+        
+        document.getElementById('category-section').style.display = 'block';
+        updateStatus(`${selectedBrands.length} marca(s) seleccionada(s)`, 'success');
+    });
+    
+    // 3. Seleccionar categoría principal
+    mainTagSelect.addEventListener('change', function() {
+        selectedMainTag = this.value;
         if (!selectedMainTag) {
             updateStatus('Seleccione una categoría', 'warning');
             return;
         }
-
-        try {
-            // Obtener subetiquetas disponibles
-            availableSubtags = await window.electronAPI.getSubtagsByMainTag(
-                currentFilePath, 
-                selectedBrand, 
-                selectedMainTag
-            );
-
-            const subtagsContainer = document.getElementById('subtags-container');
-            subtagsContainer.innerHTML = '';
-            
-            if (!availableSubtags || availableSubtags.length === 0) {
-                subtagsContainer.innerHTML = '<p class="text-muted">No se encontraron subetiquetas para esta categoría</p>';
-                return;
-            }
-
-            availableSubtags.forEach(subtag => {
-                const div = document.createElement('div');
-                div.className = 'form-check mb-2';
-                div.innerHTML = `
-                    <input class="form-check-input" type="checkbox" value="${subtag}" id="subtag-${subtag}">
-                    <label class="form-check-label" for="subtag-${subtag}">
-                        ${subtag}
-                    </label>
-                `;
-                subtagsContainer.appendChild(div);
-            });
-
-            document.getElementById('subtags-section').style.display = 'block';
-            searchBtn.disabled = false;
-            updateStatus(`Categoría "${selectedMainTag}" seleccionada`, 'success');
-
-        } catch (error) {
-            console.error('Error al seleccionar categoría:', error);
-            updateStatus(`Error: ${error.message}`, 'error');
+        
+        // Definir subetiquetas según la categoría seleccionada
+        let subtags = [];
+        switch(selectedMainTag) {
+            case 'RECEPCIONES':
+                subtags = ['TotalRecepcionesMes', 'ValorNumerico', 'TotalDocumentosMes', 'ImporteTotalRecepciones'];
+                break;
+            case 'ENTREGAS':
+                subtags = ['TotalEntregasMes', 'ValorNumerico', 'TotalDocumentosMes', 'ImporteTotalEntregasMes'];
+                break;
+            case 'CONTROLDEEXISTENCIAS':
+                subtags = ['ValorNumerico'];
+                break;
         }
-    }
+        
+        // Mostrar las subetiquetas disponibles
+        const dataContainer = document.getElementById('data-container');
+        dataContainer.innerHTML = `
+            <h3>Subetiquetas disponibles para ${selectedMainTag}</h3>
+            <div class="subtags-list">
+                ${subtags.map(subtag => `
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" id="subtag-${subtag}" value="${subtag}" checked>
+                        <label class="form-check-label" for="subtag-${subtag}">${subtag}</label>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+        
+        document.getElementById('data-section').style.display = 'block';
+        updateStatus(`Categoría "${selectedMainTag}" seleccionada`, 'success');
+    });
+    
+searchBtn.addEventListener('click', async function() {
+    try {
+        // Obtener TODAS las subetiquetas disponibles para la categoría seleccionada
+        const subtags = [];
+        switch(selectedMainTag) {
+            case 'RECEPCIONES':
+                subtags.push('TotalRecepcionesMes', 'ValorNumerico', 'TotalDocumentosMes', 'ImporteTotalRecepciones');
+                break;
+            case 'ENTREGAS':
+                subtags.push('TotalEntregasMes', 'ValorNumerico', 'TotalDocumentosMes', 'ImporteTotalEntregasMes');
+                break;
+            case 'CONTROLDEEXISTENCIAS':
+                subtags.push('ValorNumerico');
+                break;
+        }
 
-    // Función para buscar datos
-    async function searchData() {
-        try {
-            const checkboxes = document.querySelectorAll('#subtags-container input[type="checkbox"]:checked');
-            if (checkboxes.length === 0) {
-                updateStatus('Seleccione al menos una subetiqueta', 'warning');
-                return;
-            }
-
-            const subtags = Array.from(checkboxes).map(cb => cb.value);
-            updateStatus('Buscando datos...', 'info');
-
+        updateStatus('Buscando datos...', 'info');
+        
+        // Buscar datos para todas las marcas seleccionadas
+        allResults = [];
+        
+        for (const brand of selectedBrands) {
             const values = await window.electronAPI.getSubtagValues(
                 currentFilePath,
-                selectedBrand,
+                brand,
                 selectedMainTag,
-                subtags
+                subtags // Pasar todas las subetiquetas, no solo las seleccionadas
             );
-
-            // Mostrar resultados
-            const resultsTable = document.getElementById('results-table');
-            if (!resultsTable) {
-                throw new Error('Tabla de resultados no encontrada');
+            
+            if (values) {
+                allResults.push({
+                    brand,
+                    mainTag: selectedMainTag,
+                    values: Object.entries(values).map(([key, value]) => ({
+                        key,
+                        value: value || 'N/A'
+                    }))
+                });
             }
-
-            resultsTable.innerHTML = `
-                <thead class="table-dark">
-                    <tr>
-                        <th>Dato</th>
-                        <th>Valor</th>
-                        <th>Acción</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${Object.entries(values).map(([key, value]) => `
-                        <tr>
-                            <td>${key}</td>
-                            <td>${value || 'N/A'}</td>
-                            <td>
-                                <button class="btn btn-sm btn-success" 
-                                    onclick="addToSelected('${key.replace(/'/g, "\\'")}', '${String(value || '').replace(/'/g, "\\'")}')">
-                                    <i class="bi bi-plus-lg"></i> Agregar
-                                </button>
-                            </td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            `;
-
-            document.getElementById('results-section').style.display = 'block';
-            updateStatus('Datos encontrados correctamente', 'success');
-
-        } catch (error) {
-            console.error('Error al buscar datos:', error);
-            updateStatus(`Error: ${error.message}`, 'error');
         }
-    }
-
-    // Función para agregar items seleccionados (expuesta globalmente)
-    window.addToSelected = (subtag, value) => {
-        if (selectedSubtags.some(item => item.subtag === subtag)) {
-            updateStatus(`"${subtag}" ya está seleccionado`, 'warning');
-            return;
-        }
-
-        selectedSubtags.push({
-            subtag,
-            value,
-            mainTag: selectedMainTag,
-            brand: selectedBrand
-        });
-
-        updateSelectedTags();
-        document.getElementById('generate-section').style.display = 'block';
-        updateStatus(`"${subtag}" agregado al reporte`, 'success');
-    };
-
-    // Función para actualizar la lista de seleccionados
-    function updateSelectedTags() {
-        const container = document.getElementById('selected-tags-container');
-        const tableBody = document.getElementById('selected-tags-body');
         
-        if (!container || !tableBody) {
-            console.error('Elementos de selección no encontrados');
+        // Mostrar resultados en la tabla
+        renderResultsTable();
+        document.getElementById('results-section').style.display = 'block';
+        updateStatus('Datos encontrados correctamente', 'success');
+        
+    } catch (error) {
+        console.error('Error al buscar datos:', error);
+        updateStatus(`Error: ${error.message}`, 'error');
+    }
+});
+    
+    // Función para renderizar la tabla de resultados
+    function renderResultsTable() {
+        const tbody = resultsTable.querySelector('tbody');
+        tbody.innerHTML = '';
+        
+        allResults.forEach(brandData => {
+            brandData.values.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td><input type="checkbox" class="row-checkbox" data-brand="${brandData.brand}" data-key="${item.key}"></td>
+                    <td>${brandData.brand}</td>
+                    <td>${brandData.mainTag}</td>
+                    <td>${item.key}</td>
+                    <td>${item.value}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        });
+        
+        // Actualizar contador
+        updateSelectedCount();
+    }
+    
+    // 5. Selección de resultados
+    function updateSelectedCount() {
+        const selectedCount = document.querySelectorAll('.row-checkbox:checked').length;
+        document.getElementById('selected-count').textContent = `${selectedCount} seleccionados`;
+    }
+    
+    // Seleccionar todos los resultados
+    selectAllResultsBtn.addEventListener('click', function() {
+        const selectAll = document.getElementById('select-all-checkbox');
+        selectAll.checked = !selectAll.checked;
+        const checkboxes = document.querySelectorAll('.row-checkbox');
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = selectAll.checked;
+        });
+        updateSelectedCount();
+    });
+    
+    // Limpiar selección
+    clearSelectionBtn.addEventListener('click', function() {
+        const checkboxes = document.querySelectorAll('.row-checkbox');
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = false;
+        });
+        document.getElementById('select-all-checkbox').checked = false;
+        updateSelectedCount();
+    });
+    
+    // Checkbox "Seleccionar todos"
+    document.getElementById('select-all-checkbox').addEventListener('change', function() {
+        const checkboxes = document.querySelectorAll('.row-checkbox');
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = this.checked;
+        });
+        updateSelectedCount();
+    });
+    
+    // Event listener para checkboxes individuales
+    resultsTable.addEventListener('change', function(e) {
+        if (e.target.classList.contains('row-checkbox')) {
+            const allChecked = [...document.querySelectorAll('.row-checkbox')].every(cb => cb.checked);
+            document.getElementById('select-all-checkbox').checked = allChecked;
+            updateSelectedCount();
+        }
+    });
+    
+    // 6. Agregar seleccionados al reporte
+    addSelectedBtn.addEventListener('click', function() {
+        const checkboxes = document.querySelectorAll('.row-checkbox:checked');
+        
+        if (checkboxes.length === 0) {
+            updateStatus('Seleccione al menos un dato para agregar', 'warning');
             return;
         }
-
+        
+        checkboxes.forEach(checkbox => {
+            const row = checkbox.closest('tr');
+            const cells = row.querySelectorAll('td');
+            const brand = checkbox.dataset.brand;
+            const key = checkbox.dataset.key;
+            const value = cells[4].textContent;
+            
+            // Verificar si ya existe
+            const exists = selectedData.some(item => 
+                item.brand === brand && item.mainTag === selectedMainTag && item.key === key
+            );
+            
+            if (!exists) {
+                selectedData.push({
+                    brand,
+                    mainTag: selectedMainTag,
+                    key,
+                    value
+                });
+            }
+        });
+        
+        renderSelectedData();
+        document.getElementById('generate-section').style.display = 'block';
+        updateStatus(`${checkboxes.length} dato(s) agregado(s) al reporte`, 'success');
+    });
+    
+    // Función para renderizar los datos seleccionados
+    function renderSelectedData() {
+        const container = document.getElementById('selected-tags-container');
+        const tableBody = document.getElementById('selected-data-table').querySelector('tbody');
+        
         // Actualizar chips
-        container.innerHTML = selectedSubtags.length > 0 
-            ? selectedSubtags.map(tag => `
-                <span class="tag-chip">
-                    ${tag.subtag}
-                    <span class="remove-btn" onclick="removeSelectedTag('${tag.subtag.replace(/'/g, "\\'")}')">
-                        <i class="bi bi-x"></i>
+        container.innerHTML = selectedData.length > 0 
+            ? selectedData.map(item => `
+                <div class="tag-chip">
+                    ${item.brand} - ${item.key}
+                    <span class="remove-btn" data-brand="${item.brand}" data-key="${item.key}">
+                        <span class="icon">❌</span>
                     </span>
-                </span>
-              `).join('')
-            : '<span class="tag-chip">No hay datos seleccionados</span>';
-
+                </div>
+            `).join('')
+            : '<div class="text-muted">No hay datos seleccionados</div>';
+        
         // Actualizar tabla
-        tableBody.innerHTML = selectedSubtags.length > 0
-            ? selectedSubtags.map((tag, index) => `
+        tableBody.innerHTML = selectedData.length > 0
+            ? selectedData.map(item => `
                 <tr>
-                    <td>${tag.brand}</td>
-                    <td>${tag.mainTag}</td>
-                    <td>${tag.subtag}</td>
-                    <td>${tag.value}</td>
+                    <td>${item.brand}</td>
+                    <td>${item.mainTag}</td>
+                    <td>${item.key}</td>
+                    <td>${item.value}</td>
                     <td>
-                        <button class="btn btn-sm btn-danger" 
-                            onclick="removeSelectedTag('${tag.subtag.replace(/'/g, "\\'")}')">
-                            <i class="bi bi-trash"></i>
+                        <button class="btn btn-sm btn-danger remove-selected" 
+                            data-brand="${item.brand}" data-key="${item.key}">
+                            <span class="icon">🗑️</span>
                         </button>
                     </td>
                 </tr>
-              `).join('')
+            `).join('')
             : '<tr><td colspan="5" class="text-center">No hay datos seleccionados</td></tr>';
-    }
-
-    // Función para eliminar items seleccionados (expuesta globalmente)
-    window.removeSelectedTag = (subtag) => {
-        selectedSubtags = selectedSubtags.filter(item => item.subtag !== subtag);
-        updateSelectedTags();
         
-        if (selectedSubtags.length === 0) {
-            document.getElementById('generate-section').style.display = 'none';
-        }
-        
-        updateStatus(`"${subtag}" removido del reporte`, 'info');
-    };
-
-    // Función para generar reporte en TXT
-    async function generateTxtReport() {
-        try {
-            if (selectedSubtags.length === 0) {
-                updateStatus('No hay datos seleccionados', 'warning');
-                return;
-            }
-
-            updateStatus('Generando reporte TXT...', 'info');
-            showProgress(25);
-
-            const metadata = await window.electronAPI.extractMetadata(currentFilePath);
-            const reportContent = await window.electronAPI.formatContent({
-                selectedTags: selectedSubtags,
-                brandName: selectedBrand,
-                descripcionInstalacion: metadata.descripcionInstalacion,
-                numPermiso: metadata.numPermiso,
-                formatType: 'txt'
+        // Agregar event listeners para eliminar
+        document.querySelectorAll('.remove-btn, .remove-selected').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const brand = this.dataset.brand;
+                const key = this.dataset.key;
+                
+                selectedData = selectedData.filter(item => 
+                    !(item.brand === brand && item.key === key)
+                );
+                
+                renderSelectedData();
+                
+                if (selectedData.length === 0) {
+                    document.getElementById('generate-section').style.display = 'none';
+                }
+                
+                updateStatus(`"${key}" eliminado del reporte`, 'info');
             });
-
-            const reportPath = await window.electronAPI.saveFile(reportContent, 'txt');
-            
-            showProgress(100);
-            updateStatus(`Reporte TXT generado: ${path.basename(reportPath)}`, 'success');
-            resetProgressAfterDelay();
-
-        } catch (error) {
-            console.error('Error al generar TXT:', error);
-            updateStatus(`Error al generar TXT: ${error.message}`, 'error');
-            resetProgress();
-        }
+        });
     }
-
-    // Función para generar reporte en PDF
-    async function generatePdfReport() {
+    
+    // 7. Generar reportes
+    async function generateReport(formatType) {
         try {
-            if (selectedSubtags.length === 0) {
+            if (selectedData.length === 0) {
                 updateStatus('No hay datos seleccionados', 'warning');
                 return;
             }
-
-            updateStatus('Generando reporte PDF...', 'info');
+            
+            updateStatus(`Generando reporte ${formatType.toUpperCase()}...`, 'info');
             showProgress(25);
-
+            
+            // Extraer metadatos
             const metadata = await window.electronAPI.extractMetadata(currentFilePath);
+            
+            // Formatear contenido
             const reportData = {
-                selectedTags: selectedSubtags,
-                brandName: selectedBrand,
-                descripcionInstalacion: metadata.descripcionInstalacion,
-                numPermiso: metadata.numPermiso,
-                formatType: 'pdf'
+                selectedTags: selectedData,
+                brands: [...new Set(selectedData.map(item => item.brand))],
+                descripcionInstalacion: metadata.descripcionInstalacion || 'No especificado',
+                numPermiso: metadata.numPermiso || 'No especificado',
+                formatType
             };
-
-            const reportPath = await window.electronAPI.generateReport(reportData, 'pdf');
+            
+            // Generar reporte
+            const reportPath = await window.electronAPI.generateReport(reportData, formatType);
             
             showProgress(100);
-            updateStatus(`Reporte PDF generado: ${path.basename(reportPath)}`, 'success');
+            updateStatus(`Reporte ${formatType.toUpperCase()} generado: ${path.basename(reportPath)}`, 'success');
             resetProgressAfterDelay();
-
+            
         } catch (error) {
-            console.error('Error al generar PDF:', error);
-            updateStatus(`Error al generar PDF: ${error.message}`, 'error');
+            console.error(`Error al generar ${formatType}:`, error);
+            updateStatus(`Error al generar ${formatType}: ${error.message}`, 'error');
             resetProgress();
         }
     }
-
+    
+    // Event listeners para botones de generación
+    generateTxtBtn.addEventListener('click', () => generateReport('txt'));
+    generatePdfBtn.addEventListener('click', () => generateReport('pdf'));
+    
     // Funciones auxiliares para la barra de progreso
     function showProgress(percent) {
         const progressBar = document.getElementById('progress-bar');
         if (progressBar) {
             progressBar.style.width = `${percent}%`;
-            progressBar.style.display = 'block';
         }
     }
-
+    
     function resetProgress() {
         const progressBar = document.getElementById('progress-bar');
         if (progressBar) {
             progressBar.style.width = '0%';
-            progressBar.style.display = 'none';
         }
     }
-
+    
     function resetProgressAfterDelay(delay = 3000) {
         setTimeout(resetProgress, delay);
     }
-
-    // Asignar event listeners
+    
+    // Inicializar
     selectFileBtn.addEventListener('click', selectFile);
-    brandSelect.addEventListener('change', selectBrand);
-    mainTagSelect.addEventListener('change', selectMainTag);
-    searchBtn.addEventListener('click', searchData);
-    generateTxtBtn.addEventListener('click', generateTxtReport);
-    generatePdfBtn.addEventListener('click', generatePdfReport);
-
+    
     // Polyfill para path.basename
     const path = {
         basename: (filePath) => {

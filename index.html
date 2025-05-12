@@ -3,12 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta http-equiv="Content-Security-Policy" content="
-        default-src 'self';
-        script-src 'self';
-        style-src 'self' 'unsafe-inline';
-        img-src 'self' data:;
-    ">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
     <title>Procesador de Datos XML</title>
     <link rel="stylesheet" href="styles.css">
 </head>
@@ -38,15 +33,22 @@
             </div>
         </section>
 
-        <!-- Sección de marca -->
+        <!-- Sección de marca (actualizada para selección múltiple) -->
         <section id="brand-section" class="card" style="display: none;">
             <div class="card-header">
                 <div class="step-badge">2</div>
-                <h2 class="card-title">Seleccionar Marca</h2>
+                <h2 class="card-title">Seleccionar Marca(s)</h2>
             </div>
-            <select id="brand-select" class="form-control" disabled>
-                <option value="">-- Seleccione una marca --</option>
-            </select>
+            <div id="brand-checkboxes" class="checkbox-container">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="select-all-brands">
+                    <label class="form-check-label" for="select-all-brands">Seleccionar todas</label>
+                </div>
+                <!-- Las marcas se agregarán dinámicamente aquí -->
+            </div>
+            <button id="confirm-brands-btn" class="btn btn-primary" style="margin-top: 15px; display: none;">
+                <span class="icon">✓</span> Confirmar selección
+            </button>
         </section>
 
         <!-- Sección de categoría -->
@@ -55,8 +57,11 @@
                 <div class="step-badge">3</div>
                 <h2 class="card-title">Seleccionar Categoría</h2>
             </div>
-            <select id="main-tag-select" class="form-control" disabled>
+            <select id="main-tag-select" class="form-control">
                 <option value="">-- Seleccione una categoría --</option>
+                <option value="RECEPCIONES">RECEPCIONES</option>
+                <option value="ENTREGAS">ENTREGAS</option>
+                <option value="CONTROLDEEXISTENCIAS">CONTROL DE EXISTENCIAS</option>
             </select>
         </section>
 
@@ -66,30 +71,68 @@
                 <div class="step-badge">4</div>
                 <h2 class="card-title">Datos Disponibles</h2>
             </div>
-            <div id="data-container"></div>
-            <button id="search-btn" class="btn btn-primary" disabled>
+            <div id="data-container" class="data-container"></div>
+            <button id="search-btn" class="btn btn-primary">
                 <span class="icon">🔍</span> Buscar Datos
             </button>
         </section>
 
-        <!-- Sección de resultados -->
+        <!-- Sección de resultados (actualizada) -->
         <section id="results-section" class="card" style="display: none;">
             <div class="card-header">
                 <div class="step-badge">5</div>
                 <h2 class="card-title">Resultados</h2>
             </div>
+            <div class="results-controls">
+                <button id="select-all-results" class="btn btn-secondary">Seleccionar todos</button>
+                <button id="clear-selection" class="btn btn-secondary">Limpiar selección</button>
+                <span id="selected-count" class="selected-count">0 seleccionados</span>
+            </div>
             <div class="table-container">
-                <table id="results-table" class="table">
-                    <!-- Contenido dinámico -->
+                <table id="results-table" class="results-table">
+                    <thead>
+                        <tr>
+                            <th><input type="checkbox" id="select-all-checkbox"></th>
+                            <th>Marca</th>
+                            <th>Categoría</th>
+                            <th>Dato</th>
+                            <th>Valor</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Contenido dinámico -->
+                    </tbody>
                 </table>
             </div>
+            <button id="add-selected-btn" class="btn btn-primary" style="margin-top: 15px;">
+                <span class="icon">➕</span> Agregar seleccionados
+            </button>
         </section>
 
-        <!-- Sección de generación -->
+        <!-- Sección de generación (actualizada) -->
         <section id="generate-section" class="card" style="display: none;">
             <div class="card-header">
                 <div class="step-badge">6</div>
                 <h2 class="card-title">Generar Reporte</h2>
+            </div>
+            <div id="selected-tags-container" class="selected-tags-container">
+                <!-- Se mostrarán los tags seleccionados -->
+            </div>
+            <div class="table-container">
+                <table id="selected-data-table" class="table">
+                    <thead>
+                        <tr>
+                            <th>Marca</th>
+                            <th>Categoría</th>
+                            <th>Dato</th>
+                            <th>Valor</th>
+                            <th>Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Contenido dinámico -->
+                    </tbody>
+                </table>
             </div>
             <div class="btn-group">
                 <button id="generate-txt-btn" class="btn btn-primary">
