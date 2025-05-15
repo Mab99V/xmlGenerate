@@ -197,74 +197,66 @@ contextBridge.exposeInMainWorld('electronAPI', {
         });
     },
 
-    // Función unificada para generación de reportes
     generateReport: async (data, formatType = 'txt') => {
         try {
-            console.log('[RENDERER] Preparando datos para generateReport', { formatType, data });
+            console.log('[RENDERER] Iniciando generación de reporte', { formatType });
 
-            // Validación mejorada y normalización de datos
-            if (!data) throw new Error('Datos de reporte no proporcionados');
-            
+            // Validación básica de entrada
+            if (!data) throw new Error('Datos no proporcionados');
+
+            // Normalización de metadatos con valores por defecto
+            const requiredMetadata = {
+                descripcionInstalacion: data.metadata?.descripcionInstalacion || 'No especificado',
+                numPermiso: data.metadata?.numPermiso || 'No especificado',
+                fechaMedicion: data.metadata?.fechaMedicion || new Date().toISOString().slice(0,10)
+            };
+
+            // Verificación de metadatos mínimos (puedes ajustar según tus necesidades)
+            if (!data.metadata) {
+                console.warn('[RENDERER] Advertencia: No se proporcionaron metadatos, usando valores por defecto');
+            }
+
             // Normalización de selectedTags
-            const normalizedSelectedTags = Array.isArray(data.selectedTags) 
+            const normalizedTags = Array.isArray(data.selectedTags) 
                 ? data.selectedTags 
                 : (data.selectedTags ? [data.selectedTags] : []);
 
-            // Validación detallada de estructura
-            const validatedTags = normalizedSelectedTags.map((item, index) => {
-                if (!item || typeof item !== 'object') {
-                    throw new Error(`Item en posición ${index} no es un objeto válido`);
-                }
+            if (normalizedTags.length === 0) {
+                throw new Error('No hay datos seleccionados para generar el reporte');
+            }
 
-                const requiredFields = ['brand', 'mainTag', 'key', 'value'];
-                const missingFields = requiredFields.filter(field => !(field in item));
-
-                if (missingFields.length > 0) {
-                    throw new Error(`Item en posición ${index} falta campos: ${missingFields.join(', ')}`);
-                }
-
-                return {
-                    brand: String(item.brand || 'Sin marca'),
-                    mainTag: String(item.mainTag || 'Sin etiqueta principal'),
-                    key: String(item.key || 'Sin clave'),
-                    value: String(item.value || 'Sin valor')
-                };
-            });
-
-            // Normalización de metadata
-            const normalizedMetadata = data.metadata || {};
-            const requiredMetadata = {
-                descripcionInstalacion: normalizedMetadata.descripcionInstalacion || 'No especificado',
-                numPermiso: normalizedMetadata.numPermiso || 'No especificado',
-                fechaMedicion: normalizedMetadata.fechaMedicion || new Date().toISOString().slice(0,10)
-            };
-
-            // Preparar el objeto final normalizado
-            const reportData = {
-                selectedTags: validatedTags,
+            // Estructura final normalizada
+            const normalizedData = {
+                selectedTags: normalizedTags.map(tag => ({
+                    brand: String(tag.brand || 'Sin marca'),
+                    mainTag: String(tag.mainTag || 'Sin categoría'),
+                    key: String(tag.key || 'Sin clave'),
+                    value: String(tag.value || 'Sin valor')
+                })),
                 brands: Array.isArray(data.brands) ? data.brands : [],
-                metadata: requiredMetadata,
-                timestamp: new Date().toISOString()
+                metadata: requiredMetadata
             };
 
-            console.log('[RENDERER] Datos normalizados para reporte:', reportData);
+            console.log('[RENDERER] Datos normalizados:', normalizedData);
 
-            const fileName = `Reporte_Combustibles_${
-                reportData.brands.join('_') || 'multiples'
-            }_${new Date().toISOString().slice(0,10)}.${formatType}`;
-            
-            // Enviar al main process
-            const result = await ipcRenderer.invoke('dialog:saveFile', {
-                content: formatType === 'pdf' ? JSON.stringify(reportData) : formatReportContent(reportData, formatType),
+            // Generación de contenido según formato
+            let contentToSave;
+            const fileName = `Reporte_${normalizedData.brands.join('_') || 'multiples'}_${new Date().toISOString().slice(0,10)}.${formatType}`;
+
+            if (formatType === 'pdf') {
+                contentToSave = JSON.stringify(normalizedData);
+            } else {
+                contentToSave = this.generateTextContent(normalizedData);
+            }
+
+            return await ipcRenderer.invoke('dialog:saveFile', {
+                content: contentToSave,
                 defaultName: fileName,
                 formatType
             });
 
-            console.log('[RENDERER] Resultado del guardado:', result);
-            return result;
-
         } catch (error) {
-            console.error('[RENDERER ERROR] Error en generateReport:', {
+            console.error('[RENDERER ERROR] Detalles completos:', {
                 error: error.message,
                 stack: error.stack,
                 inputData: data
@@ -272,9 +264,36 @@ contextBridge.exposeInMainWorld('electronAPI', {
             throw error;
         }
     },
-    // Eliminar generatePDFReport ya que está duplicada
-    
-    // Extracción de metadatos
+
+    generateTextContent: (data) => {
+        try {
+            // Encabezado con metadatos
+            let content = `=== REPORTE DE COMBUSTIBLES ===\n\n`;
+            content += `Instalación: ${data.metadata.descripcionInstalacion}\n`;
+            content += `Número de Permiso: ${data.metadata.numPermiso}\n`;
+            content += `Fecha de Medición: ${data.metadata.fechaMedicion}\n\n`;
+            
+            // Datos principales
+            content += `=== DATOS ===\n`;
+            data.selectedTags.forEach((item, index) => {
+                content += `\nRegistro ${index + 1}:\n`;
+                content += `Marca: ${item.brand}\n`;
+                content += `Categoría: ${item.mainTag}\n`;
+                content += `Clave: ${item.key}\n`;
+                content += `Valor: ${item.value}\n`;
+            });
+            
+            // Pie de reporte
+            content += `\n=== FIN DEL REPORTE ===\n`;
+            content += `Generado el: ${new Date().toLocaleString()}\n`;
+            
+            return content;
+        } catch (error) {
+            console.error('[RENDERER ERROR] Error al generar texto:', error);
+            throw new Error('Error al formatear el contenido de texto');
+        }
+    },
+
     extractMetadata: (filePath) => {
         if (!filePath) throw new Error('La ruta del archivo es requerida');
         return ipcRenderer.invoke('data:extractMetadata', filePath);

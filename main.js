@@ -52,7 +52,6 @@ function setupIPCHandlers() {
         try {
             const xmlContent = fs.readFileSync(filePath, 'utf-8');
             
-            // Buscar todas las categorías posibles en el XML
             const categoryPattern = /<(?:Covol:)?(RECEPCIONES|ENTREGAS|CONTROLDEEXISTENCIAS)(?:>|\s)/g;
             const foundCategories = new Set();
             let match;
@@ -61,14 +60,13 @@ function setupIPCHandlers() {
                 foundCategories.add(match[1]);
             }
             
-            // Si no encontramos ninguna categoría, usar RECEPCIONES como valor por defecto
             return Array.from(foundCategories).length > 0 
                 ? Array.from(foundCategories) 
                 : ['RECEPCIONES'];
                 
         } catch (error) {
             console.error('Error al extraer categorías:', error);
-            return ['RECEPCIONES']; // Valor por defecto si hay error
+            return ['RECEPCIONES'];
         }
     });
     
@@ -76,18 +74,44 @@ function setupIPCHandlers() {
     ipcMain.handle('data:extractBrands', async (_, filePath) => {
         try {
             const xmlContent = fs.readFileSync(filePath, 'utf-8');
-            const matches = xmlContent.match(/<Covol:MarcaComercial>(.*?)<\/Covol:MarcaComercial>/g) || [];
-            const brands = new Set(
-                matches.map(m => m.replace(/<\/?Covol:MarcaComercial>/g, '').trim())
-                .filter(brand => brand)
-            );
-            return Array.from(brands);
+            const result = await parseStringPromise(xmlContent, {
+                explicitArray: false,
+                ignoreAttrs: true,
+                tagNameProcessors: [name => name.replace(/^Covol:/, '')],
+                trim: true
+            });
+    
+            const brands = new Set();
+    
+            function findBrands(node) {
+                if (!node) return;
+                
+                if (node.MarcaComercial) {
+                    const brand = typeof node.MarcaComercial === 'string' 
+                        ? node.MarcaComercial 
+                        : node.MarcaComercial._ || node.MarcaComercial['$']?.text;
+                    if (brand && brand.trim()) {
+                        brands.add(brand.trim());
+                    }
+                }
+    
+                for (const key in node) {
+                    if (typeof node[key] === 'object') {
+                        findBrands(node[key]);
+                    }
+                }
+            }
+    
+            findBrands(result);
+            return Array.from(brands).filter(b => b);
+    
         } catch (error) {
             console.error('Error al extraer marcas:', error);
-            throw new Error('Error al procesar el archivo XML');
+            throw new Error('Error al procesar el archivo XML: ' + error.message);
         }
     });
 
+    // Extraer valores específicos del XML
     ipcMain.handle('data:getValues', async (_, { filePath, brandName, mainTag, subtags }) => {
         try {
             console.log(`Iniciando búsqueda para: ${brandName} - ${mainTag} - ${subtags.join(', ')}`);
@@ -104,7 +128,6 @@ function setupIPCHandlers() {
             
             console.log('XML parseado correctamente');
     
-            // Función para buscar valores incluyendo estructuras anidadas
             const findValues = (node) => {
                 const values = {};
                 let foundBrand = false;
@@ -112,23 +135,19 @@ function setupIPCHandlers() {
                 const walk = (currentNode) => {
                     if (!currentNode) return;
                     
-                    // Verificar si encontramos la marca correcta
                     if (currentNode.MarcaComercial === brandName) {
                         foundBrand = true;
                     }
                     
-                    // Si estamos en la marca correcta y encontramos la categoría principal
                     if (foundBrand && currentNode[mainTag]) {
                         const mainNode = currentNode[mainTag];
                         
                         subtags.forEach(subtag => {
-                            // Buscar directamente en el nodo principal
                             if (mainNode[subtag] !== undefined && values[subtag] === undefined) {
                                 values[subtag] = mainNode[subtag];
                                 console.log(`Encontrado ${subtag} directo: ${values[subtag]}`);
                             }
                             
-                            // Búsqueda especial para ValorNumerico en estructuras anidadas
                             if (subtag === 'ValorNumerico' && !values[subtag]) {
                                 const nestedPaths = {
                                     'RECEPCIONES': ['SumaVolumenRecepcionMes.ValorNumerico', 'ValorNumerico'],
@@ -155,7 +174,6 @@ function setupIPCHandlers() {
                         });
                     }
                     
-                    // Continuar búsqueda recursiva
                     for (const key in currentNode) {
                         if (typeof currentNode[key] === 'object') {
                             walk(currentNode[key]);
@@ -166,10 +184,10 @@ function setupIPCHandlers() {
                 walk(node);
                 return values;
             };
+            
             const values = findValues(result);
             console.log('Valores encontrados:', values);
             
-            // Asegurar que todas las subetiquetas solicitadas estén en la respuesta
             const completeValues = {};
             subtags.forEach(subtag => {
                 completeValues[subtag] = values[subtag] !== undefined ? values[subtag] : null;
@@ -186,55 +204,65 @@ function setupIPCHandlers() {
     // Extraer metadatos del XML
     ipcMain.handle('data:extractMetadata', async (_, filePath) => {
         try {
-            const xmlContent = fs.readFileSync(filePath, 'utf-8');
+            const xmlContent = await fs.promises.readFile(filePath, 'utf-8');
             
-            const descMatch = xmlContent.match(/<Covol:DescripcionInstalacion>(.*?)<\/Covol:DescripcionInstalacion>/);
-            const permisoMatch = xmlContent.match(/<Covol:NumPermiso>(.*?)<\/Covol:NumPermiso>/);
-            const fechaMatch = xmlContent.match(/<Covol:FechaYHoraEstaMedicionMes>(.*?)<\/Covol:FechaYHoraEstaMedicionMes>/);
-
+            // Extraer NumPermiso con namespace
+            const numPermisoMatch = xmlContent.match(/<Covol:NumPermiso>([^<]+)<\/Covol:NumPermiso>/);
+            const numPermiso = numPermisoMatch ? numPermisoMatch[1].trim() : 'No especificado';
+            
+            // Extraer DescripcionInstalacion con namespace
+            const descripcionMatch = xmlContent.match(/<Covol:DescripcionInstalacion>([^<]+)<\/Covol:DescripcionInstalacion>/);
+            const descripcionInstalacion = descripcionMatch ? descripcionMatch[1].trim() : 'No especificado';
+            
+            // Extraer fecha
+            const fechaMatch = xmlContent.match(/<Covol:FechaMedicion>([^<]+)<\/Covol:FechaMedicion>/);
+            const fechaMedicion = fechaMatch ? fechaMatch[1].trim() : new Date().toLocaleString('es-MX');
+            
             return {
-                descripcionInstalacion: descMatch?.[1]?.trim() || 'No especificado',
-                numPermiso: permisoMatch?.[1]?.trim() || 'No especificado',
-                fechaMedicion: fechaMatch?.[1]?.trim() || new Date().toLocaleDateString()
+                numPermiso,
+                descripcionInstalacion,
+                fechaMedicion
             };
         } catch (error) {
             console.error('Error al extraer metadatos:', error);
-            throw error;
+            return {
+                numPermiso: 'No disponible',
+                descripcionInstalacion: 'No disponible',
+                fechaMedicion: new Date().toLocaleString('es-MX')
+            };
         }
     });
+    
+    // Handler para guardar archivo PDF
+    ipcMain.handle('dialog:saveFile', async (_, { content, defaultName, formatType }) => {
+        try {
+            console.log('[SAVE] Iniciando proceso de guardado', { formatType, defaultName });
+            
+            if (!content || !defaultName || !formatType) {
+                throw new Error('Parámetros incompletos para guardar archivo');
+            }
 
-   // Handler para guardar archivo con validación completa
-ipcMain.handle('dialog:saveFile', async (_, { content, defaultName, formatType }) => {
-    try {
-        console.log('[SAVE] Iniciando proceso de guardado', { formatType, defaultName });
-        
-        // Validación básica de parámetros
-        if (!content || !defaultName || !formatType) {
-            throw new Error('Parámetros incompletos para guardar archivo');
-        }
+            if (formatType !== 'pdf') {
+                throw new Error('Solo se admite generación de PDF');
+            }
 
-        // Mostrar diálogo de guardado
-        console.log('[SAVE] Mostrando diálogo de guardado...');
-        const { filePath, canceled } = await dialog.showSaveDialog({
-            defaultPath: defaultName,
-            filters: [
-                { name: `${formatType.toUpperCase()} Files`, extensions: [formatType] },
-                { name: 'All Files', extensions: ['*'] }
-            ]
-        });
+            console.log('[SAVE] Mostrando diálogo de guardado...');
+            const { filePath, canceled } = await dialog.showSaveDialog({
+                defaultPath: defaultName,
+                filters: [
+                    { name: 'PDF Files', extensions: ['pdf'] },
+                    { name: 'All Files', extensions: ['*'] }
+                ]
+            });
 
-        if (canceled || !filePath) {
-            console.log('[SAVE] Usuario canceló el diálogo');
-            return { success: false, canceled: true };
-        }
+            if (canceled || !filePath) {
+                console.log('[SAVE] Usuario canceló el diálogo');
+                return { success: false, canceled: true };
+            }
 
-        console.log('[SAVE] Ruta seleccionada:', filePath);
-
-        // Procesamiento según tipo de archivo
-        if (formatType === 'pdf') {
+            console.log('[SAVE] Ruta seleccionada:', filePath);
             console.log('[SAVE] Procesando PDF...');
             
-            // Validar y parsear contenido
             let parsedContent;
             try {
                 parsedContent = JSON.parse(content);
@@ -246,7 +274,6 @@ ipcMain.handle('dialog:saveFile', async (_, { content, defaultName, formatType }
                 throw new Error('El contenido PDF no es un JSON válido');
             }
 
-            // Validar estructura de datos
             if (!parsedContent.selectedTags || !Array.isArray(parsedContent.selectedTags)) {
                 throw new Error('Formato de datos inválido: selectedTags debe ser un array');
             }
@@ -255,7 +282,6 @@ ipcMain.handle('dialog:saveFile', async (_, { content, defaultName, formatType }
                 throw new Error('No hay datos seleccionados para generar el PDF');
             }
 
-            // Generar PDF
             console.log('[SAVE] Generando PDF...');
             await generatePDF(filePath, parsedContent);
             
@@ -269,84 +295,32 @@ ipcMain.handle('dialog:saveFile', async (_, { content, defaultName, formatType }
                 }
             };
 
-        } else if (formatType === 'txt') {
-            console.log('[SAVE] Guardando TXT...');
-            
-            // Validar contenido TXT
-            if (typeof content !== 'string') {
-                throw new Error('El contenido para TXT debe ser un string');
-            }
-
-            if (content.length === 0) {
-                throw new Error('El contenido TXT está vacío');
-            }
-
-            fs.writeFileSync(filePath, content, 'utf-8');
-            console.log('[SAVE] TXT guardado exitosamente');
-            return { 
-                success: true, 
-                path: filePath,
-                stats: {
-                    size: content.length
-                }
-            };
-
-        } else {
-            throw new Error(`Tipo de archivo no soportado: ${formatType}`);
-        }
-
-    } catch (error) {
-        console.error('[SAVE ERROR] Detalles del error:', {
-            message: error.message,
-            stack: error.stack,
-            inputParams: {
-                formatType,
-                defaultName,
-                contentLength: content?.length || 0
-            }
-        });
-        throw error;
-    }
-});
-
-    // Handler para generar reporte (compatibilidad)
-    ipcMain.handle('report:generate', async (_, { data, formatType }) => {
-        try {
-            const fileName = `Reporte_Combustibles_${data.brands.join('_')}_${new Date().toISOString().slice(0,10)}.${formatType}`;
-            
-            const { filePath } = await dialog.showSaveDialog({
-                defaultPath: fileName,
-                filters: [
-                    { name: 'PDF Files', extensions: ['pdf'] },
-                    { name: 'Text Files', extensions: ['txt'] },
-                    { name: 'All Files', extensions: ['*'] }
-                ]
-            });
-
-            if (!filePath) return null;
-
-            if (formatType === 'pdf') {
-                await generatePDF(filePath, data);
-                // Abrir el PDF con el visor predeterminado
-                shell.openPath(filePath).catch(err => {
-                    console.error('Error al abrir PDF:', err);
-                });
-                return { success: true, path: filePath };
-            } else if (formatType === 'txt') {
-                await generateTXT(filePath, data);
-                return { success: true, path: filePath };
-            }
-            
-            return { success: false, message: 'Formato no soportado' };
         } catch (error) {
-            console.error('Error al generar reporte:', error);
+            console.error('[SAVE ERROR] Detalles del error:', {
+                message: error.message,
+                stack: error.stack,
+                inputParams: {
+                    formatType,
+                    defaultName,
+                    contentLength: content?.length || 0
+                }
+            });
             throw error;
         }
     });
 
     // Handler específico para PDF
-    ipcMain.handle('report:generatePDF', async (_, { content, filePath }) => {
+    ipcMain.handle('report:generatePDF', async (_, { content, fileName }) => {
         try {
+            const { filePath } = await dialog.showSaveDialog({
+                defaultPath: fileName,
+                filters: [
+                    { name: 'PDF Files', extensions: ['pdf'] }
+                ]
+            });
+
+            if (!filePath) return { canceled: true };
+
             await generatePDF(filePath, content);
             shell.openPath(filePath).catch(err => {
                 console.error('Error al abrir PDF:', err);
@@ -359,7 +333,7 @@ ipcMain.handle('dialog:saveFile', async (_, { content, defaultName, formatType }
     });
 }
 
-// Función mejorada para generar PDF
+// Función para generar PDF
 async function generatePDF(filePath, data) {
     return new Promise((resolve, reject) => {
         try {
@@ -367,7 +341,6 @@ async function generatePDF(filePath, data) {
             const stream = fs.createWriteStream(filePath);
             doc.pipe(stream);
 
-            // Validar datos primero
             if (!data?.selectedTags?.length) {
                 throw new Error('No hay datos seleccionados para generar el reporte');
             }
@@ -381,9 +354,9 @@ async function generatePDF(filePath, data) {
             // Metadatos
             doc.fontSize(10)
                .font('Helvetica')
-               .text(`Instalación: ${data.descripcionInstalacion || 'No especificado'}`, { align: 'left' })
-               .text(`Permiso CRE: ${data.numPermiso || 'No especificado'}`, { align: 'left' })
-               .text(`Fecha: ${new Date().toLocaleString('es-MX')}`, { align: 'left' })
+               .text(`Instalación: ${data.metadata?.descripcionInstalacion || 'No especificado'}`, { align: 'left' })
+               .text(`Permiso CRE: ${data.metadata?.numPermiso || 'No especificado'}`, { align: 'left' })
+               .text(`Fecha: ${data.metadata?.fechaMedicion || new Date().toLocaleString('es-MX')}`, { align: 'left' })
                .text(`Marcas: ${data.brands?.join(', ') || 'No especificado'}`, { align: 'left' })
                .moveDown(1);
 
@@ -428,7 +401,7 @@ async function generatePDF(filePath, data) {
                        .font('Helvetica');
                        
                     groupedData[brand][category].forEach(item => {
-                        const fieldName = item.key || item.subtag;
+                        const fieldName = item.key;
                         doc.text(fieldName, col1 + 20, y)
                            .text(item.value?.toString() || 'N/D', col3, y);
                         y += 15;
@@ -461,66 +434,6 @@ async function generatePDF(filePath, data) {
             reject(error);
         }
     });
-}
-
-// Función mejorada para generar TXT
-async function generateTXT(filePath, data) {
-    try {
-        // Validación de datos
-        if (!data?.selectedTags?.length) {
-            throw new Error('No hay datos seleccionados para generar el reporte');
-        }
-
-        // Encabezado del reporte
-        let content = '============================================\n';
-        content += 'REPORTE DE COMBUSTIBLES\n';
-        content += '============================================\n';
-        content += `Instalación: ${data.descripcionInstalacion || 'No especificado'}\n`;
-        content += `Permiso CRE: ${data.numPermiso || 'No especificado'}\n`;
-        content += `Fecha: ${new Date().toLocaleString('es-MX', {
-            day: '2-digit', 
-            month: '2-digit', 
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        })}\n`;
-        content += `Marcas: ${data.brands?.join(', ') || 'No especificado'}\n`;
-        content += '--------------------------------------------\n';
-        content += 'DETALLES:\n';
-
-        // Agrupar datos por marca y categoría
-        const groupedData = {};
-        data.selectedTags.forEach(item => {
-            if (!groupedData[item.brand]) {
-                groupedData[item.brand] = {};
-            }
-            if (!groupedData[item.brand][item.mainTag]) {
-                groupedData[item.brand][item.mainTag] = [];
-            }
-            groupedData[item.brand][item.mainTag].push(item);
-        });
-
-        // Generar contenido en el formato exacto requerido
-        Object.keys(groupedData).sort().forEach(brand => {
-            Object.keys(groupedData[brand]).sort().forEach(category => {
-                groupedData[brand][category].forEach(item => {
-                    // Formato: [MARCA] CATEGORIA - TIPODATO: VALOR
-                    const fieldName = item.key || item.subtag;
-                    content += `[${brand}] ${category} - ${fieldName}: ${item.value}\n`;
-                });
-            });
-        });
-
-        // Pie del reporte
-        content += '============================================\n';
-
-        // Escribir archivo
-        fs.writeFileSync(filePath, content, 'utf-8');
-        return filePath;
-    } catch (error) {
-        console.error('Error en generateTXT:', error);
-        throw error;
-    }
 }
 
 // Función para formatear tamaño de archivo

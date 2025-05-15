@@ -17,7 +17,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const selectAllResultsBtn = document.getElementById('select-all-results');
     const clearSelectionBtn = document.getElementById('clear-selection');
     const addSelectedBtn = document.getElementById('add-selected-btn');
-    const generateTxtBtn = document.getElementById('generate-txt-btn');
     const generatePdfBtn = document.getElementById('generate-pdf-btn');
     
     // Función para actualizar el estado
@@ -36,6 +35,19 @@ document.addEventListener('DOMContentLoaded', () => {
         statusElement.className = `alert alert-${type}`;
     }
     
+    // Función para mostrar errores
+    function showErrorMessage(message, title = 'Error') {
+        const errorElement = document.getElementById('error-message') || document.createElement('div');
+        errorElement.id = 'error-message';
+        errorElement.innerHTML = `
+            <div class="alert alert-danger">
+                <strong>${title}:</strong> ${message}
+            </div>
+        `;
+        document.body.appendChild(errorElement);
+        setTimeout(() => errorElement.remove(), 5000);
+    }
+
     // 1. Cargar archivo XML
     async function selectFile() {
         try {
@@ -118,6 +130,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             console.error('Error al cargar archivo:', error);
             updateStatus(`Error: ${error.message}`, 'error');
+            showErrorMessage(error.message, 'Error al cargar archivo');
         }
     }
     
@@ -128,6 +141,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (selectedBrands.length === 0) {
             updateStatus('Seleccione al menos una marca', 'warning');
+            showErrorMessage('Debe seleccionar al menos una marca', 'Selección requerida');
             return;
         }
         
@@ -186,6 +200,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateStatus(`Categoría "${selectedMainTag}" seleccionada`, 'success');
     });
     
+    // 4. Buscar datos
     searchBtn.addEventListener('click', async function() {
         try {
             // Obtener subetiquetas seleccionadas
@@ -194,6 +209,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             if (selectedSubtags.length === 0) {
                 updateStatus('Seleccione al menos una subetiqueta', 'warning');
+                showErrorMessage('Debe seleccionar al menos una subetiqueta', 'Búsqueda inválida');
                 return;
             }
     
@@ -236,12 +252,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 } catch (error) {
                     console.error(`Error al buscar datos para ${brand}:`, error);
-                    updateStatus(`Error con ${brand}: ${error.message}`, 'error', 3000);
+                    updateStatus(`Error con ${brand}: ${error.message}`, 'error');
                 }
             }
             
             if (!foundAnyData) {
                 updateStatus('No se encontraron datos para los criterios seleccionados', 'warning');
+                showErrorMessage('No se encontraron datos con los criterios actuales', 'Búsqueda sin resultados');
                 return;
             }
             
@@ -252,6 +269,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             console.error('Error en el proceso de búsqueda:', error);
             updateStatus(`Error: ${error.message}`, 'error');
+            showErrorMessage(error.message, 'Error en la búsqueda');
         }
     });
     
@@ -306,7 +324,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateSelectedCount();
     }
     
-    // 5. Selección de resultados
+    // 5. Manejo de selección de resultados
     function updateSelectedCount() {
         const selectedCount = document.querySelectorAll('.row-checkbox:checked').length;
         document.getElementById('selected-count').textContent = `${selectedCount} seleccionados`;
@@ -333,15 +351,6 @@ document.addEventListener('DOMContentLoaded', () => {
         updateSelectedCount();
     });
     
-    // Checkbox "Seleccionar todos"
-    document.getElementById('select-all-checkbox').addEventListener('change', function() {
-        const checkboxes = document.querySelectorAll('.row-checkbox');
-        checkboxes.forEach(checkbox => {
-            checkbox.checked = this.checked;
-        });
-        updateSelectedCount();
-    });
-    
     // Event listener para checkboxes individuales
     resultsTable.addEventListener('change', function(e) {
         if (e.target.classList.contains('row-checkbox')) {
@@ -357,6 +366,7 @@ document.addEventListener('DOMContentLoaded', () => {
         
         if (checkboxes.length === 0) {
             updateStatus('Seleccione al menos un dato para agregar', 'warning');
+            showErrorMessage('Debe seleccionar al menos un dato', 'Selección requerida');
             return;
         }
         
@@ -445,138 +455,90 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-    // 7. Generar reportes
-    async function generateReport(formatType) {
-        try {
-            if (selectedData.length === 0) {
-                updateStatus('No hay datos seleccionados', 'warning');
-                return;
-            }
-            
-            updateStatus(`Generando reporte ${formatType.toUpperCase()}...`, 'info');
-            showProgress(25);
-            
-            const metadata = await window.electronAPI.extractMetadata(currentFilePath);
-            
-            const reportData = {
-                selectedTags: selectedData,
-                brands: [...new Set(selectedData.map(item => item.brand))],
-                descripcionInstalacion: metadata.descripcionInstalacion,
-                numPermiso: metadata.numPermiso,
-                fechaMedicion: metadata.fechaMedicion
-            };
-            
-            const result = await window.electronAPI.generateReport(reportData, formatType);
-            
-            if (result && result.success) {
-                showProgress(100);
-                updateStatus(`Reporte ${formatType.toUpperCase()} generado y abierto`, 'success');
-            } else {
-                throw new Error(result?.message || 'Error desconocido al generar reporte');
-            }
-            
-            resetProgressAfterDelay();
-        } catch (error) {
-            console.error(`Error al generar ${formatType}:`, error);
-            updateStatus(`Error al generar ${formatType}: ${error.message}`, 'error');
-            resetProgress();
-        }
-    }
-
+    // 7. Generar reporte PDF
     async function generatePDF() {
         try {
-            console.log('[RENDERER] Iniciando generación de PDF...');
+            updateStatus('Preparando reporte PDF...', 'info');
             
-            // 1. Obtener metadata primero
+            // Validar antes de generar
+            if (selectedData.length === 0) {
+                throw new Error('No hay datos seleccionados para generar el reporte');
+            }
+            if (!currentFilePath) {
+                throw new Error('No se ha cargado ningún archivo fuente');
+            }
+    
+            // Obtener metadatos del archivo XML
             const metadata = await window.electronAPI.extractMetadata(currentFilePath);
-            console.log('[RENDERER] Metadata obtenida:', metadata);
-            
-            // 2. Preparar datos con estructura validada
+            console.log('Metadata obtenida:', metadata);
+    
+            // Preparar estructura de datos para el PDF
             const reportData = {
-                selectedTags: selectedData.map((item, index) => {
-                    // Validación en el renderer para detectar problemas temprano
-                    if (!item.brand || !item.mainTag || !item.key || !item.value) {
-                        console.warn(`Item incompleto en posición ${index}:`, item);
-                    }
-                    return {
-                        brand: item.brand,
-                        mainTag: item.mainTag,
-                        key: item.key,
-                        value: item.value
-                    };
-                }),
+                selectedTags: selectedData.map(item => ({
+                    brand: String(item.brand || 'Sin marca'),
+                    mainTag: String(item.mainTag || 'Sin categoría'),
+                    key: String(item.key || 'Sin clave'),
+                    value: String(item.value || 'Sin valor')
+                })),
                 brands: [...new Set(selectedData.map(item => item.brand))],
                 metadata: {
-                    descripcionInstalacion: metadata.descripcionInstalacion,
                     numPermiso: metadata.numPermiso,
+                    descripcionInstalacion: metadata.descripcionInstalacion,
                     fechaMedicion: metadata.fechaMedicion
                 }
             };
     
-            console.log('[RENDERER] Datos preparados para PDF:', reportData);
-            
-            // 3. Generar reporte
+            console.log('Datos para PDF:', reportData);
+    
+            // Generar reporte
+            updateStatus('Generando archivo PDF...', 'info');
             const result = await window.electronAPI.generateReport(reportData, 'pdf');
             
             if (result && !result.canceled) {
-                console.log('[RENDERER] PDF generado con éxito:', result.path);
+                updateStatus(`Reporte PDF guardado en: ${result.path}`, 'success');
                 window.notifications.showNotification(
-                    'Reporte generado', 
-                    `El PDF se guardó en: ${result.path}`
+                    'Reporte PDF generado',
+                    `Archivo guardado en:\n${result.path}`
                 );
                 return result;
-            } else {
-                console.log('[RENDERER] Usuario canceló el guardado');
-                return { canceled: true };
             }
-        } catch (error) {
-            console.error('[RENDERER ERROR] Error al generar PDF:', {
-                message: error.message,
-                stack: error.stack,
-                selectedData: selectedData,
-                currentFilePath: currentFilePath
-            });
             
-            window.notifications.showNotification(
-                'Error al generar PDF', 
-                error.message || 'Ocurrió un error desconocido'
-            );
+        } catch (error) {
+            console.error('Error al generar PDF:', error);
+            updateStatus(`Error al generar PDF: ${error.message}`, 'error');
+            showErrorMessage(error.message, 'Error al generar PDF');
             throw error;
         }
     }
-    
-    // Event listeners para botones de generación
-    generateTxtBtn.addEventListener('click', () => generateReport('txt'));
+
+    // Asignar event listener para generación de PDF
     generatePdfBtn.addEventListener('click', generatePDF);
-    
+
     // Funciones auxiliares para la barra de progreso
     function showProgress(percent) {
         const progressBar = document.getElementById('progress-bar');
-        if (progressBar) {
-            progressBar.style.width = `${percent}%`;
-        }
+        const progressText = document.getElementById('progress-text');
+        if (progressBar) progressBar.style.width = `${percent}%`;
+        if (progressText) progressText.textContent = `${percent}%`;
     }
     
     function resetProgress() {
-        const progressBar = document.getElementById('progress-bar');
-        if (progressBar) {
-            progressBar.style.width = '0%';
-        }
+        showProgress(0);
     }
     
     function resetProgressAfterDelay(delay = 3000) {
         setTimeout(resetProgress, delay);
     }
     
-    // Inicializar
+    // Inicialización
     selectFileBtn.addEventListener('click', selectFile);
     
+    // Polyfill para path.basename
     const path = {
         basename: (filePath) => {
             return filePath.split(/[\\/]/).pop();
         },
         join: (...parts) => {
-            // Simple implementación de join para el renderer
             return parts.join('/').replace(/\/+/g, '/');
         }
     };
