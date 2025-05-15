@@ -51,8 +51,12 @@ document.addEventListener('DOMContentLoaded', () => {
             document.getElementById('file-info').innerHTML = 
                 `<span class="icon">ℹ️</span><span>Archivo: ${path.basename(fileInfo.path)} (${fileInfo.size})</span>`;
             
-            // Cargar marcas comerciales
-            const brands = await window.electronAPI.extractBrands(currentFilePath);
+            // Cargar marcas y categorías en paralelo
+            const [brands, categories] = await Promise.all([
+                window.electronAPI.extractBrands(currentFilePath),
+                window.electronAPI.extractCategories(currentFilePath)
+            ]);
+            
             if (!brands?.length) {
                 updateStatus('El archivo no contiene marcas comerciales válidas', 'warning');
                 return;
@@ -97,6 +101,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     confirmBrandsBtn.style.display = anyChecked ? 'block' : 'none';
                     selectAllBrandsCheckbox.checked = [...brandCheckboxes].every(cb => cb.checked);
                 });
+            });
+            
+            // Actualizar el selector de categorías
+            mainTagSelect.innerHTML = '<option value="">-- Seleccione categoría --</option>';
+            categories.forEach(category => {
+                const option = document.createElement('option');
+                option.value = category;
+                option.textContent = category;
+                mainTagSelect.appendChild(option);
             });
             
             document.getElementById('brand-section').style.display = 'block';
@@ -256,20 +269,37 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
+        // Agrupar por marca y categoría
+        const groupedResults = {};
+        
         allResults.forEach(brandData => {
-            brandData.values.forEach(item => {
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td><input type="checkbox" class="row-checkbox" 
-                         data-brand="${brandData.brand}" 
-                         data-key="${item.key}" 
-                         data-value="${item.value}"></td>
-                    <td>${brandData.brand}</td>
-                    <td>${brandData.mainTag}</td>
-                    <td>${item.key}</td>
-                    <td>${item.value}</td>
-                `;
-                tbody.appendChild(tr);
+            if (!groupedResults[brandData.brand]) {
+                groupedResults[brandData.brand] = {};
+            }
+            if (!groupedResults[brandData.brand][brandData.mainTag]) {
+                groupedResults[brandData.brand][brandData.mainTag] = [];
+            }
+            groupedResults[brandData.brand][brandData.mainTag].push(...brandData.values);
+        });
+        
+        // Renderizar tabla
+        Object.keys(groupedResults).forEach(brand => {
+            Object.keys(groupedResults[brand]).forEach(category => {
+                groupedResults[brand][category].forEach(item => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td><input type="checkbox" class="row-checkbox" 
+                             data-brand="${brand}" 
+                             data-category="${category}"
+                             data-key="${item.key}" 
+                             data-value="${item.value}"></td>
+                        <td>${brand}</td>
+                        <td>${category}</td>
+                        <td>${item.key}</td>
+                        <td>${item.value}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
             });
         });
         
@@ -331,21 +361,22 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         checkboxes.forEach(checkbox => {
-            const row = checkbox.closest('tr');
-            const cells = row.querySelectorAll('td');
             const brand = checkbox.dataset.brand;
+            const category = checkbox.dataset.category;
             const key = checkbox.dataset.key;
-            const value = cells[4].textContent;
+            const value = checkbox.dataset.value;
             
             // Verificar si ya existe
             const exists = selectedData.some(item => 
-                item.brand === brand && item.mainTag === selectedMainTag && item.key === key
+                item.brand === brand && 
+                item.mainTag === category && 
+                item.key === key
             );
             
             if (!exists) {
                 selectedData.push({
                     brand,
-                    mainTag: selectedMainTag,
+                    mainTag: category,
                     key,
                     value
                 });
@@ -367,7 +398,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ? selectedData.map(item => `
                 <div class="tag-chip">
                     ${item.brand} - ${item.key}
-                    <span class="remove-btn" data-brand="${item.brand}" data-key="${item.key}">
+                    <span class="remove-btn" data-brand="${item.brand}" data-category="${item.mainTag}" data-key="${item.key}">
                         <span class="icon">❌</span>
                     </span>
                 </div>
@@ -384,7 +415,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td>${item.value}</td>
                     <td>
                         <button class="btn btn-sm btn-danger remove-selected" 
-                            data-brand="${item.brand}" data-key="${item.key}">
+                            data-brand="${item.brand}" data-category="${item.mainTag}" data-key="${item.key}">
                             <span class="icon">🗑️</span>
                         </button>
                     </td>
@@ -396,10 +427,11 @@ document.addEventListener('DOMContentLoaded', () => {
         document.querySelectorAll('.remove-btn, .remove-selected').forEach(btn => {
             btn.addEventListener('click', function() {
                 const brand = this.dataset.brand;
+                const category = this.dataset.category;
                 const key = this.dataset.key;
                 
                 selectedData = selectedData.filter(item => 
-                    !(item.brand === brand && item.key === key)
+                    !(item.brand === brand && item.mainTag === category && item.key === key)
                 );
                 
                 renderSelectedData();
@@ -424,38 +456,98 @@ document.addEventListener('DOMContentLoaded', () => {
             updateStatus(`Generando reporte ${formatType.toUpperCase()}...`, 'info');
             showProgress(25);
             
-            // Extraer metadatos
             const metadata = await window.electronAPI.extractMetadata(currentFilePath);
             
-            // Preparar datos para el reporte
             const reportData = {
-                selectedTags: selectedData.map(item => ({
-                    brand: item.brand,
-                    mainTag: item.mainTag,
-                    key: item.key,
-                    value: item.value
-                })),
+                selectedTags: selectedData,
                 brands: [...new Set(selectedData.map(item => item.brand))],
                 descripcionInstalacion: metadata.descripcionInstalacion,
-                numPermiso: metadata.numPermiso
+                numPermiso: metadata.numPermiso,
+                fechaMedicion: metadata.fechaMedicion
             };
             
-            // Generar reporte
-            const reportPath = await window.electronAPI.generateReport(reportData, formatType);
+            const result = await window.electronAPI.generateReport(reportData, formatType);
             
-            showProgress(100);
-            updateStatus(`Reporte ${formatType.toUpperCase()} generado: ${path.basename(reportPath)}`, 'success');
+            if (result && result.success) {
+                showProgress(100);
+                updateStatus(`Reporte ${formatType.toUpperCase()} generado y abierto`, 'success');
+            } else {
+                throw new Error(result?.message || 'Error desconocido al generar reporte');
+            }
+            
             resetProgressAfterDelay();
-            
         } catch (error) {
             console.error(`Error al generar ${formatType}:`, error);
             updateStatus(`Error al generar ${formatType}: ${error.message}`, 'error');
             resetProgress();
         }
     }
+
+    async function generatePDF() {
+        try {
+            console.log('[RENDERER] Iniciando generación de PDF...');
+            
+            // 1. Obtener metadata primero
+            const metadata = await window.electronAPI.extractMetadata(currentFilePath);
+            console.log('[RENDERER] Metadata obtenida:', metadata);
+            
+            // 2. Preparar datos con estructura validada
+            const reportData = {
+                selectedTags: selectedData.map((item, index) => {
+                    // Validación en el renderer para detectar problemas temprano
+                    if (!item.brand || !item.mainTag || !item.key || !item.value) {
+                        console.warn(`Item incompleto en posición ${index}:`, item);
+                    }
+                    return {
+                        brand: item.brand,
+                        mainTag: item.mainTag,
+                        key: item.key,
+                        value: item.value
+                    };
+                }),
+                brands: [...new Set(selectedData.map(item => item.brand))],
+                metadata: {
+                    descripcionInstalacion: metadata.descripcionInstalacion,
+                    numPermiso: metadata.numPermiso,
+                    fechaMedicion: metadata.fechaMedicion
+                }
+            };
+    
+            console.log('[RENDERER] Datos preparados para PDF:', reportData);
+            
+            // 3. Generar reporte
+            const result = await window.electronAPI.generateReport(reportData, 'pdf');
+            
+            if (result && !result.canceled) {
+                console.log('[RENDERER] PDF generado con éxito:', result.path);
+                window.notifications.showNotification(
+                    'Reporte generado', 
+                    `El PDF se guardó en: ${result.path}`
+                );
+                return result;
+            } else {
+                console.log('[RENDERER] Usuario canceló el guardado');
+                return { canceled: true };
+            }
+        } catch (error) {
+            console.error('[RENDERER ERROR] Error al generar PDF:', {
+                message: error.message,
+                stack: error.stack,
+                selectedData: selectedData,
+                currentFilePath: currentFilePath
+            });
+            
+            window.notifications.showNotification(
+                'Error al generar PDF', 
+                error.message || 'Ocurrió un error desconocido'
+            );
+            throw error;
+        }
+    }
+    
     // Event listeners para botones de generación
     generateTxtBtn.addEventListener('click', () => generateReport('txt'));
-    generatePdfBtn.addEventListener('click', () => generateReport('pdf'));
+    generatePdfBtn.addEventListener('click', generatePDF);
     
     // Funciones auxiliares para la barra de progreso
     function showProgress(percent) {
@@ -479,10 +571,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // Inicializar
     selectFileBtn.addEventListener('click', selectFile);
     
-    // Polyfill para path.basename
     const path = {
         basename: (filePath) => {
             return filePath.split(/[\\/]/).pop();
+        },
+        join: (...parts) => {
+            // Simple implementación de join para el renderer
+            return parts.join('/').replace(/\/+/g, '/');
         }
     };
 });

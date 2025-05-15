@@ -4,14 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">
-    <title>Procesador de Datos XML</title>
+    <title>Procesador de Datos XML - PEMEX</title>
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1><span class="icon">📋</span> Procesador de Datos XML</h1>
-            <p>Herramienta para extraer y analizar datos de archivos XML</p>
+            <h1><span class="icon">📋</span> Procesador de Datos XML - PEMEX</h1>
+            <p>Herramienta para extraer y analizar datos de archivos XML de combustibles</p>
         </div>
 
         <!-- Sección de archivo -->
@@ -33,7 +33,7 @@
             </div>
         </section>
 
-        <!-- Sección de marca (actualizada para selección múltiple) -->
+        <!-- Sección de marca -->
         <section id="brand-section" class="card" style="display: none;">
             <div class="card-header">
                 <div class="step-badge">2</div>
@@ -58,11 +58,12 @@
                 <h2 class="card-title">Seleccionar Categoría</h2>
             </div>
             <select id="main-tag-select" class="form-control">
-                <option value="">-- Seleccione una categoría --</option>
-                <option value="RECEPCIONES">RECEPCIONES</option>
-                <option value="ENTREGAS">ENTREGAS</option>
-                <option value="CONTROLDEEXISTENCIAS">CONTROL DE EXISTENCIAS</option>
+                <option value="">-- Cargando categorías --</option>
+                <!-- Las categorías se cargarán dinámicamente -->
             </select>
+            <div id="category-loading" class="loading-indicator" style="display: none;">
+                <span class="icon">⏳</span> Cargando categorías disponibles...
+            </div>
         </section>
 
         <!-- Sección de datos -->
@@ -70,6 +71,7 @@
             <div class="card-header">
                 <div class="step-badge">4</div>
                 <h2 class="card-title">Datos Disponibles</h2>
+                <span id="current-category" class="current-category"></span>
             </div>
             <div id="data-container" class="data-container"></div>
             <button id="search-btn" class="btn btn-primary">
@@ -77,26 +79,31 @@
             </button>
         </section>
 
-        <!-- Sección de resultados (actualizada) -->
+        <!-- Sección de resultados -->
         <section id="results-section" class="card" style="display: none;">
             <div class="card-header">
                 <div class="step-badge">5</div>
                 <h2 class="card-title">Resultados</h2>
             </div>
             <div class="results-controls">
-                <button id="select-all-results" class="btn btn-secondary">Seleccionar todos</button>
-                <button id="clear-selection" class="btn btn-secondary">Limpiar selección</button>
+                <button id="select-all-results" class="btn btn-secondary">
+                    <span class="icon">✓</span> Seleccionar todos
+                </button>
+                <button id="clear-selection" class="btn btn-secondary">
+                    <span class="icon">✗</span> Limpiar selección
+                </button>
                 <span id="selected-count" class="selected-count">0 seleccionados</span>
             </div>
             <div class="table-container">
                 <table id="results-table" class="results-table">
                     <thead>
                         <tr>
-                            <th><input type="checkbox" id="select-all-checkbox"></th>
-                            <th>Marca</th>
-                            <th>Categoría</th>
-                            <th>Dato</th>
-                            <th>Valor</th>
+                            <th width="5%"><input type="checkbox" id="select-all-checkbox"></th>
+                            <th width="20%">Marca</th>
+                            <th width="20%">Categoría</th>
+                            <th width="25%">Dato</th>
+                            <th width="25%">Valor</th>
+                            <th width="5%">Acción</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -104,12 +111,14 @@
                     </tbody>
                 </table>
             </div>
-            <button id="add-selected-btn" class="btn btn-primary" style="margin-top: 15px;">
-                <span class="icon">➕</span> Agregar seleccionados
-            </button>
+            <div class="results-footer">
+                <button id="add-selected-btn" class="btn btn-primary">
+                    <span class="icon">➕</span> Agregar seleccionados
+                </button>
+            </div>
         </section>
 
-        <!-- Sección de generación (actualizada) -->
+        <!-- Sección de generación -->
         <section id="generate-section" class="card" style="display: none;">
             <div class="card-header">
                 <div class="step-badge">6</div>
@@ -142,10 +151,25 @@
                     <span class="icon">📊</span> Generar PDF
                 </button>
             </div>
-            <div id="progress-bar" class="progress-bar"></div>
+            <div class="progress-container">
+                <div id="progress-bar" class="progress-bar"></div>
+                <span id="progress-text" class="progress-text">0%</span>
+            </div>
+        </section>
+
+        <!-- Sección de ayuda -->
+        <section id="help-section" class="card">
+            <div class="card-header">
+                <div class="step-badge">?</div>
+                <h2 class="card-title">Ayuda</h2>
+            </div>
+            <div class="help-content">
+                <p>Seleccione un archivo XML válido de PEMEX y siga los pasos para generar su reporte.</p>
+                <p>Para problemas técnicos, contacte al soporte.</p>
+            </div>
         </section>
     </div>
 
-    <script src="renderer.js"></script>
+    <script src="renderer.js" defer></script>
 </body>
 </html>
