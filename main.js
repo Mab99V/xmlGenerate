@@ -6,6 +6,24 @@ const PDFDocument = require('pdfkit');
 
 let mainWindow;
 
+// Función para obtener descripciones según la categoría
+const getFieldDescriptions = (category) => {
+    if (category === 'RECEPCIONES') {
+        return {
+            'TotalRecepcionesMes': 'Total de recepciones al mes',
+            'ValorNumerico': 'Suma de volumen recibido al mes',
+            'TotalDocumentosMes': 'Recepciones facturadas',
+            'ImporteTotalRecepcionesMensual': 'Importe recepciones facturadas'
+        };
+    } else {
+        return {
+            'TotalEntregasMes': 'Total de entregas al mes',
+            'ValorNumerico': 'Suma de volumen entregado al mes',
+            'TotalDocumentosMes': 'Entregas Facturadas',
+            'ImporteTotalEntregasMes': 'Importe de entregas facturadas'
+        };
+    }
+};
 function createWindow() {
     mainWindow = new BrowserWindow({
         width: 1200,
@@ -20,7 +38,6 @@ function createWindow() {
     });
 
     mainWindow.loadFile('index.html');
-    // mainWindow.webContents.openDevTools();
 }
 
 function setupIPCHandlers() {
@@ -376,18 +393,6 @@ async function generatePDF(filePath, data) {
             const col3 = 450;
             let y = doc.y;
 
-            // Mapeo de descripciones completas
-            const fieldDescriptions = {
-                'TotalRecepcionesMes': 'Total de recepciones al mes',
-                'ValorNumerico': 'Suma de volumen recibido al mes',
-                'TotalDocumentosMes': 'Recepciones facturadas',
-                'ImporteTotalRecepcionesMensual': 'Importe recepciones facturadas',
-                'TotalEntregasMes': 'Total de entregas al mes',
-                'ValorNumerico': 'Suma de volumen entregado al mes',
-                'TotalDocumentosMes':'Entregas Facturadas',
-                'ImporteTotalEntregasMes': 'Importe de entregas facturadas'
-            };
-
             // Agrupar datos por marca y categoría
             const groupedData = {};
             data.selectedTags.forEach(item => {
@@ -403,6 +408,9 @@ async function generatePDF(filePath, data) {
             // Generar contenido
             Object.keys(groupedData).sort().forEach(brand => {
                 Object.keys(groupedData[brand]).sort().forEach(category => {
+                    // Obtener descripciones dinámicas
+                    const fieldDescriptions = getFieldDescriptions(category);
+                    
                     // Mostrar categoría como subtítulo
                     doc.fontSize(11)
                        .font('Helvetica-Bold')
