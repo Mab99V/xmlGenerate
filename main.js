@@ -372,8 +372,21 @@ async function generatePDF(filePath, data) {
 
             // Configuración de columnas
             const col1 = 50;
-            const col3 = 350;
+            const col2 = 250;
+            const col3 = 450;
             let y = doc.y;
+
+            // Mapeo de descripciones completas
+            const fieldDescriptions = {
+                'TotalRecepcionesMes': 'Total de recepciones al mes',
+                'ValorNumerico': 'Suma de volumen recibido al mes',
+                'TotalDocumentosMes': 'Recepciones facturadas',
+                'ImporteTotalRecepcionesMensual': 'Importe recepciones facturadas',
+                'TotalEntregasMes': 'Total de entregas al mes',
+                'ValorNumerico': 'Suma de volumen entregado al mes',
+                'TotalDocumentosMes':'Entregas Facturadas',
+                'ImporteTotalEntregasMes': 'Importe de entregas facturadas'
+            };
 
             // Agrupar datos por marca y categoría
             const groupedData = {};
@@ -396,14 +409,25 @@ async function generatePDF(filePath, data) {
                        .text(`${brand} - ${category}`, col1, y);
                     y += 20;
                     
-                    // Mostrar datos
+                    // Mostrar datos con descripciones completas
                     doc.fontSize(10)
                        .font('Helvetica');
                        
                     groupedData[brand][category].forEach(item => {
                         const fieldName = item.key;
+                        const description = fieldDescriptions[fieldName] || fieldName;
+                        let displayValue = item.value?.toString() || 'N/D';
+                        
+                        // Formatear valores especiales
+                        if (fieldName === 'ValorNumerico') {
+                            displayValue += ' LITROS';
+                        } else if (fieldName.includes('Importe')) {
+                            displayValue = '$' + displayValue;
+                        }
+                        
                         doc.text(fieldName, col1 + 20, y)
-                           .text(item.value?.toString() || 'N/D', col3, y);
+                           .text(description, col2, y)
+                           .text(displayValue, col3, y, { width: 100, align: 'right' });
                         y += 15;
                         
                         // Manejar saltos de página
